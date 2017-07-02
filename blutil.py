@@ -7,7 +7,7 @@ See http://projectgus.com/2014/03/laird-bl600-modules for more details
 Copyright (C)2014 Angus Gratton, released under BSD license as per the LICENSE file.
 """
 
-import argparse, serial, time, subprocess, sys, os, re, tempfile
+import argparse, serial, time, subprocess, sys, os, re, tempfile, requests
 
 parser = argparse.ArgumentParser(description='Perform various operations with a BL600 module. The -m option can only be used instead of -p when compiling using the -c flag. -p on the other hand is compatible with all other argument choices.')
 device_arg = parser.add_mutually_exclusive_group(required=True)
@@ -22,6 +22,10 @@ cmd_arg.add_argument('-r', '--run', help="Execute specified smartBasic file on B
 cmd_arg.add_argument('--ls', action="store_true", help="List all files uploaded to the BL600")
 cmd_arg.add_argument('--rm', metavar="FILE", help="Remove specified file from the BL600")
 cmd_arg.add_argument('--format', action="store_true", help="Erase all stored files from the BL600")
+
+def to_uwc(filepath):
+    parts = os.path.splitext(filepath)
+    return "%s.uwc" % parts[0]
 
 class RuntimeError(Exception):
     pass
@@ -63,7 +67,7 @@ class BLDevice(object):
         blutil_dir = os.path.dirname(sys.argv[0])
         compiler = os.path.join(blutil_dir, "XComp_%s.exe" % (self.model,))
         if not os.path.exists(compiler):
-            raise RuntimeError("Compiler not found at %s. Have you downloaded UWTerminal and unzipped the files into blutil.py dir?" % compiler)
+            return self.online_compile(filepath)
         if not os.path.exists(filepath):
             raise RuntimeError("File '%s' not found" % filepath)
         print("Compiling %s with %s..." % (filepath, os.path.basename(compiler)))
@@ -74,6 +78,18 @@ class BLDevice(object):
         if ret != 0:
             raise RuntimeError("Compilation failed")
         print("Compilation success")
+
+    def online_compile(self, filepath):
+        print('Using the online compiler')
+        url = 'http://uwterminalx.no-ip.org/xcompile.php?JSON=1'
+        payload = {'file_XComp' : 'BT900_3'}
+        f = open(filepath, 'rb')
+        files = {'file_sB': (os.path.basename('filepath'), f, 'application/octet-stream')}
+        response = requests.post(url, data=payload, files=files)
+        f.close()
+        f = open(to_uwc(filepath), 'wb')
+        f.write(response.content)
+        f.close()
 
     def upload(self, filepath):
         parts = os.path.splitext(filepath)
