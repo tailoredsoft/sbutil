@@ -9,26 +9,35 @@ Copyright (C)2014 Angus Gratton, released under BSD license as per the LICENSE f
 
 import argparse, serial, time, subprocess, sys, os, re, tempfile, requests
 
-parser = argparse.ArgumentParser(description='Perform various operations with a BL600 module. The -m option can only be used instead of -p when compiling using the -c flag. -p on the other hand is compatible with all other argument choices.')
+parser = argparse.ArgumentParser(
+    description='Perform various operations with a BL600 module. The -m option can only be used instead of -p when compiling using the -c flag. -p on the other hand is compatible with all other argument choices.')
 device_arg = parser.add_mutually_exclusive_group(required=True)
 device_arg.add_argument('-p', '--port', help="Serial port to connect to")
-device_arg.add_argument('-m', '--model', help="Specify (instead of detecting) the model number, see command output for example model string")
+device_arg.add_argument('-m', '--model',
+                        help="Specify (instead of detecting) the model number, see command output for example model string")
 parser.add_argument('-b', '--baud', type=int, default=9600, help="Baud rate for connection")
 parser.add_argument('--no-dtr', action="store_true", help="Don't toggle the DTR line as a reset")
 cmd_arg = parser.add_mutually_exclusive_group(required=True)
 cmd_arg.add_argument('-c', '--compile', help="Compile specified smartBasic file to a .uwc file.", metavar="BASICFILE")
-cmd_arg.add_argument('-l', '--load', help="Upload specified smartBasic file to BL600 (if argument is a .sb file it will be compiled first.)", metavar="FILE")
-cmd_arg.add_argument('-r', '--run', help="Execute specified smartBasic file on BL600 (if argument is a .sb file it will be compiled and uploaded first, if argument is a .uwc file it will be uploaded first.)", metavar="FILE")
+cmd_arg.add_argument('-l', '--load',
+                     help="Upload specified smartBasic file to BL600 (if argument is a .sb file it will be compiled first.)",
+                     metavar="FILE")
+cmd_arg.add_argument('-r', '--run',
+                     help="Execute specified smartBasic file on BL600 (if argument is a .sb file it will be compiled and uploaded first, if argument is a .uwc file it will be uploaded first.)",
+                     metavar="FILE")
 cmd_arg.add_argument('--ls', action="store_true", help="List all files uploaded to the BL600")
 cmd_arg.add_argument('--rm', metavar="FILE", help="Remove specified file from the BL600")
 cmd_arg.add_argument('--format', action="store_true", help="Erase all stored files from the BL600")
+
 
 def to_uwc(filepath):
     parts = os.path.splitext(filepath)
     return "%s.uwc" % parts[0]
 
+
 class RuntimeError(Exception):
     pass
+
 
 class BLDevice(object):
     def __init__(self, args):
@@ -36,7 +45,7 @@ class BLDevice(object):
             self.port = serial.Serial(args.port, args.baud, timeout=0.8)
 
     def writecmd(self, args, expect_response=True, timeout=0.5):
-        self.port.write(bytearray("AT%s%s\r"%("" if args.startswith("+") else " ", args), "ascii"))
+        self.port.write(bytearray("AT%s%s\r" % ("" if args.startswith("+") else " ", args), "ascii"))
         if not expect_response:
             return
         response = b''
@@ -47,21 +56,22 @@ class BLDevice(object):
             return str(response, "ascii")[:-3].strip()
         else:
             if len(response) == 0:
-                raise RuntimeError("Got no response to command 'AT%s'. Not connected or not in interactive mode?" % args)
+                raise RuntimeError(
+                    "Got no response to command 'AT%s'. Not connected or not in interactive mode?" % args)
             elif len(response) > 4 and response[0:4] == b'\n01\t':
                 errorcode = str(response[4:].decode())[:-1]
-                raise RuntimeError("BL600 returned error %s: %s" % (errorcode,get_errordesc(errorcode)))
+                raise RuntimeError("BL600 returned error %s: %s" % (errorcode, get_errordesc(errorcode)))
             else:
-                raise RuntimeError("Got unexpected/error response to command 'AT%s': %s" % (args,response))
+                raise RuntimeError("Got unexpected/error response to command 'AT%s': %s" % (args, response))
 
     def read_param(self, param):
-        return self.writecmd("I %d"%param).split("\t")[-1]
+        return self.writecmd("I %d" % param).split("\t")[-1]
 
     def detect_model(self):
         model = self.read_param(0)
         revision = self.read_param(13)
         print("Detected model %s %s" % (model, revision))
-        self.model = "%s_%s" % (model, revision.replace(" ","_"))
+        self.model = "%s_%s" % (model, revision.replace(" ", "_"))
 
     def compile(self, filepath):
         blutil_dir = os.path.dirname(sys.argv[0])
@@ -71,9 +81,9 @@ class BLDevice(object):
         if not os.path.exists(filepath):
             raise RuntimeError("File '%s' not found" % filepath)
         print("Compiling %s with %s..." % (filepath, os.path.basename(compiler)))
-        args = [ compiler, filepath ]
+        args = [compiler, filepath]
         if os.name != 'nt':
-            args = [ "wine" ] + args
+            args = ["wine"] + args
         ret = subprocess.call(args, stdin=None, stdout=sys.stdout, stderr=sys.stderr, shell=False)
         if ret != 0:
             raise RuntimeError("Compilation failed")
@@ -82,7 +92,7 @@ class BLDevice(object):
     def online_compile(self, filepath):
         print('Using the online compiler')
         url = 'http://uwterminalx.no-ip.org/xcompile.php?JSON=1'
-        payload = {'file_XComp' : 'BT900_3'}
+        payload = {'file_XComp': 'BT900_3'}
         f = open(filepath, 'rb')
         files = {'file_sB': (os.path.basename('filepath'), f, 'application/octet-stream')}
         response = requests.post(url, data=payload, files=files)
@@ -93,7 +103,7 @@ class BLDevice(object):
 
     def upload(self, filepath):
         parts = os.path.splitext(filepath)
-        if parts[1] != ".uwc": # compiled files have .uwc extension
+        if parts[1] != ".uwc":  # compiled files have .uwc extension
             filepath = "%s.uwc" % (parts[0],)
         devicename = get_devicename(filepath)
         print("Uploading %s as %s" % (filepath, devicename))
@@ -101,14 +111,14 @@ class BLDevice(object):
         self.writecmd('+FOW "%s"' % devicename)
         with open(filepath, "rb") as f:
             for line in chunks(f, 16):
-                row = "".join([ "%02x" % x for x in line ])
+                row = "".join(["%02x" % x for x in line])
                 self.writecmd('+FWRH "%s"' % row)
         self.writecmd('+FCL')
         print("Upload success")
 
     def run(self, filepath):
         devicename = get_devicename(filepath)
-        self.writecmd('') # check is responding at all
+        self.writecmd('')  # check is responding at all
         print("Running %s..." % devicename)
         self.writecmd('+RUN "%s"' % devicename, expect_response=False)
         output = self.port.read(1024)
@@ -119,7 +129,7 @@ class BLDevice(object):
                 print("Program completed successfully.")
             elif len(output) > 4 and output[0:4] == b'\n01\t':
                 errorcode = str(response[4:].decode())[:-1]
-                print("Error %s: %s" % (errorcode,get_errordesc(errorcode)))
+                print("Error %s: %s" % (errorcode, get_errordesc(errorcode)))
             elif output != b'\n00':
                 print("Immediate output:\n%s" % output)
         else:
@@ -141,9 +151,10 @@ class BLDevice(object):
         self.writecmd('')
         self.writecmd('&F 1', expect_response=False)
         time.sleep(0.2)
-        self.port.read(1024) # discard anything
+        self.port.read(1024)  # discard anything
         print("Format complete. Reconnecting...")
         self.writecmd('')
+
 
 def chunks(somefile, chunklen):
     while True:
@@ -152,11 +163,13 @@ def chunks(somefile, chunklen):
             return
         yield chunk
 
+
 def get_devicename(filepath):
     """ Given a file path, find an acceptable name on the BL filesystem """
     filename = os.path.split(filepath)[1]
     filename = filename.split('.')[0]
     return re.sub(r'[:*?"<>|]', "", filename)[:24]
+
 
 def test_wine():
     """ Check the wine installation is OK """
@@ -169,15 +182,17 @@ def test_wine():
         print("Wine execution failed. %s. Make sure wine is in your path and properly configured" % e)
         sys.exit(2)
 
+
 def get_errordesc(code):
     """ Go through file with list of error codes to find description """
     blutil_dir = os.path.dirname(sys.argv[0])
     with open(os.path.join(blutil_dir, 'codes.csv')) as f:
         for line in f:
-            if str(eval("0x"+code)) in line:
+            if str(eval("0x" + code)) in line:
                 return line.split('"')[1]
                 break
         return "(no description available)"
+
 
 def main():
     if os.name != 'nt':
@@ -199,11 +214,11 @@ def main():
 
     ops = []
     if args.compile:
-        ops += [ "compile" ]
+        ops += ["compile"]
     if args.load:
-        ops += [ "load" ]
+        ops += ["load"]
     if args.run:
-        ops += [ "run" ]
+        ops += ["run"]
 
     if (args.load or args.run or args.rm or args.ls or args.format or args.model is None) and not args.no_dtr:
         print("Resetting board via DTR...")
@@ -232,10 +247,10 @@ def main():
     if args.run:
         device.run(args.run)
 
+
 if __name__ == "__main__":
     try:
         main()
     except RuntimeError as e:
         print(e)
         sys.exit(2)
-
