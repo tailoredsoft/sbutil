@@ -28,6 +28,7 @@ cmd_arg.add_argument('-r', '--run',
 cmd_arg.add_argument('--ls', action="store_true", help="List all files uploaded to the BL600")
 cmd_arg.add_argument('--rm', metavar="FILE", help="Remove specified file from the BL600")
 cmd_arg.add_argument('--format', action="store_true", help="Erase all stored files from the BL600")
+cmd_arg.add_argument('--at', help="Run an AT command")
 
 
 def to_uwc(filepath):
@@ -254,6 +255,9 @@ def main():
         device.upload(args.load)
     if args.run:
         device.run(args.run)
+    if args.at:
+        print(device.writecmd(args.at, timeout=5))
+        print("Command completed")
 
 
 if __name__ == "__main__":
