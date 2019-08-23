@@ -7,7 +7,7 @@ See http://projectgus.com/2014/03/laird-bl600-modules for more details
 Copyright (C)2014 Angus Gratton, released under BSD license as per the LICENSE file.
 """
 
-import argparse, serial, time, subprocess, sys, os, re, tempfile, requests
+import argparse, serial, time, subprocess, sys, os, re, tempfile, requests, json
 
 parser = argparse.ArgumentParser(
     description='Perform various operations with a BL600 module. The -m option can only be used instead of -p when compiling using the -c flag. -p on the other hand is compatible with all other argument choices.')
@@ -98,11 +98,20 @@ class BLDevice(object):
         print('Using the online compiler')
         url = 'http://uwterminalx.no-ip.org/xcompile.php?JSON=1'
         model = self.read_param(0)
-        payload = {'file_XComp': model}
-        f = open(filepath, 'rb')
-        files = {'file_sB': (os.path.basename('filepath'), f, 'application/octet-stream')}
+        payload = {'file_XComp': f"{model}_1"}
+
+        with open(filepath, 'r') as f:
+            file_data = f.read()
+            file_dir = os.path.dirname(filepath)
+            file_data = self.do_include(file_data, file_dir)
+            file_data = file_data.encode('utf-8')
+
+        files = {'file_sB': (os.path.basename('filepath'), file_data, 'application/octet-stream')}
         response = requests.post(url, data=payload, files=files)
-        f.close()
+        if response.status_code // 100 != 2:
+            error = json.loads(response.content, encoding=response.encoding)
+            raise RuntimeError(f"Online compiler error code {error['Result']}: {error['Error']}")
+
         f = open(to_uwc(filepath), 'wb')
         f.write(response.content)
         f.close()
@@ -140,7 +149,7 @@ class BLDevice(object):
                 errorcode = str(output[4:].decode())[:-1]
                 print("Error %s: %s" % (errorcode, get_errordesc(errorcode)))
             elif output != b'\n00':
-                print("Immediate output:\n%s" % output)
+                print("Immediate output:\n%s" % output.decode('utf-8'))
         else:
             print("No immediate output, program probably running...")
 
@@ -157,12 +166,38 @@ class BLDevice(object):
 
     def format(self):
         print("Formatting BL600...")
+        self.writecmd('Z', timeout=5)
         self.writecmd('')
         self.writecmd('&F 1', expect_response=False)
         time.sleep(0.2)
         self.port.read(1024)  # discard anything
         print("Format complete. Reconnecting...")
         self.writecmd('')
+
+    def do_include(self, file, dirname):
+        pattern = re.compile(r'^#include\s+"(.*)"$', re.MULTILINE)
+        match = pattern.search(file)
+        if match is None:
+            return file
+
+        include_path = os.path.join(dirname, match.group(1))
+        include_path = os.path.abspath(include_path)
+
+        if not os.path.exists(include_path):
+            raise RuntimeError(f"Included file {include_path} does not exist")
+
+        with open(include_path, 'r') as include_file:
+            file_data = include_file.read()
+            include_dirname = os.path.dirname(include_path)
+            file_data = self.do_include(file_data, include_dirname)
+            file = f"{file[:match.start()]}\n{file_data}\n{file[match.end():]}"
+
+        file = self.do_include(file, dirname)
+
+        # the online compiler doesn't allow the string #include anywhere
+        # UwTerminalX does this replace too
+        file = file.replace('#include', "")
+        return file
 
 
 def chunks(somefile, chunklen):
