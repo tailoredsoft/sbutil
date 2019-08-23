@@ -29,6 +29,8 @@ cmd_arg.add_argument('--ls', action="store_true", help="List all files uploaded 
 cmd_arg.add_argument('--rm', metavar="FILE", help="Remove specified file from the BL600")
 cmd_arg.add_argument('--format', action="store_true", help="Erase all stored files from the BL600")
 cmd_arg.add_argument('--at', help="Run an AT command")
+cmd_arg.add_argument('--listen', action="store_true",
+                     help="Listen over serial for incoming messages, e.g. from print statements in a running program")
 
 
 def to_uwc(filepath):
@@ -199,6 +201,13 @@ class BLDevice(object):
         file = file.replace('#include', "")
         return file
 
+    def listen(self):
+        try:
+            while True:
+                print(self.port.read(1).decode(), end='')
+        except KeyboardInterrupt:
+            print('\n')
+
 
 def chunks(somefile, chunklen):
     while True:
@@ -293,6 +302,8 @@ def main():
     if args.at:
         print(device.writecmd(args.at, timeout=5))
         print("Command completed")
+    if args.listen:
+        device.listen()
 
 
 if __name__ == "__main__":
