@@ -42,10 +42,11 @@ class RuntimeError(Exception):
 class BLDevice(object):
     def __init__(self, args):
         if args.model is None:
-            self.port = serial.Serial(args.port, args.baud, timeout=0.8)
+            self.port = serial.Serial(args.port, args.baud, timeout=2)
 
     def writecmd(self, args, expect_response=True, timeout=0.5):
-        self.port.write(bytearray("AT%s%s\r" % ("" if args.startswith("+") else " ", args), "ascii"))
+        command = f"AT{'' if args.startswith('+') else ' '}{args}\r"
+        self.port.write(bytearray(command, "ascii"))
         if not expect_response:
             return
         response = b''
@@ -57,7 +58,7 @@ class BLDevice(object):
         else:
             if len(response) == 0:
                 raise RuntimeError(
-                    "Got no response to command 'AT%s'. Not connected or not in interactive mode?" % args)
+                    f"Got no response to command {repr(command)}. Not connected or not in interactive mode?")
             elif len(response) > 4 and response[0:4] == b'\n01\t':
                 errorcode = str(response[4:].decode())[:-1]
                 raise RuntimeError("BL600 returned error %s: %s" % (errorcode, get_errordesc(errorcode)))
@@ -76,10 +77,13 @@ class BLDevice(object):
     def compile(self, filepath):
         blutil_dir = os.path.dirname(sys.argv[0])
         compiler = os.path.join(blutil_dir, "XComp_%s.exe" % (self.model,))
-        if not os.path.exists(compiler):
-            return self.online_compile(filepath)
+
+        filepath = os.path.expanduser(filepath)
+        filepath = os.path.abspath(filepath)
         if not os.path.exists(filepath):
             raise RuntimeError("File '%s' not found" % filepath)
+        if not os.path.exists(compiler):
+            return self.online_compile(filepath)
         print("Compiling %s with %s..." % (filepath, os.path.basename(compiler)))
         args = [compiler, filepath]
         if os.name != 'nt':
@@ -92,7 +96,8 @@ class BLDevice(object):
     def online_compile(self, filepath):
         print('Using the online compiler')
         url = 'http://uwterminalx.no-ip.org/xcompile.php?JSON=1'
-        payload = {'file_XComp': 'BT900_3'}
+        model = self.read_param(0)
+        payload = {'file_XComp': model}
         f = open(filepath, 'rb')
         files = {'file_sB': (os.path.basename('filepath'), f, 'application/octet-stream')}
         response = requests.post(url, data=payload, files=files)
@@ -102,6 +107,9 @@ class BLDevice(object):
         f.close()
 
     def upload(self, filepath):
+        filepath = os.path.expanduser(filepath)
+        filepath = os.path.abspath(filepath)
+
         parts = os.path.splitext(filepath)
         if parts[1] != ".uwc":  # compiled files have .uwc extension
             filepath = "%s.uwc" % (parts[0],)
@@ -128,7 +136,7 @@ class BLDevice(object):
                     print("Output:\n%s" % output[:-3].decode())
                 print("Program completed successfully.")
             elif len(output) > 4 and output[0:4] == b'\n01\t':
-                errorcode = str(response[4:].decode())[:-1]
+                errorcode = str(output[4:].decode())[:-1]
                 print("Error %s: %s" % (errorcode, get_errordesc(errorcode)))
             elif output != b'\n00':
                 print("Immediate output:\n%s" % output)
@@ -178,7 +186,7 @@ def test_wine():
             ret = subprocess.call(["wine", "--version"], stdin=None, stdout=blackhole, stderr=None, shell=False)
         if ret != 0:
             raise RuntimeError("Wine returned error code" % ret)
-    except e:
+    except Exception as e:
         print("Wine execution failed. %s. Make sure wine is in your path and properly configured" % e)
         sys.exit(2)
 
