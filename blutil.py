@@ -312,3 +312,6 @@ if __name__ == "__main__":
     except RuntimeError as e:
         print(e)
         sys.exit(2)
+    except serial.SerialException as e:
+        print(e)
+        sys.exit(3)
