@@ -99,8 +99,17 @@ class BLDevice(object):
     def online_compile(self, filepath):
         print('Using the online compiler')
         url = 'http://uwterminalx.no-ip.org/xcompile.php?JSON=1'
+
+        with open('devices.json','r') as f:
+            devices = json.load(f)
+
+        devices = dict(devices)
+
         model = self.read_param(0)
-        payload = {'file_XComp': f"{model}_1"}
+        firmware_code = self.read_param(3)
+        model_firmwares = dict((firmware[1],firmware[0]) for firmware in devices[model])
+        firmware_index = model_firmwares[firmware_code]
+        payload = {'file_XComp': f"{model}_{firmware_index}"}
 
         with open(filepath, 'r') as f:
             file_data = f.read()
@@ -108,10 +117,15 @@ class BLDevice(object):
             file_data = self.do_include(file_data, file_dir)
             file_data = file_data.encode('utf-8')
 
-        files = {'file_sB': (os.path.basename('filepath'), file_data, 'application/octet-stream')}
+        with open('temp.sb','wb') as f:
+            f.write(file_data)
+
+        files = {'file_sB': (os.path.basename(filepath), file_data, 'application/octet-stream')}
         response = requests.post(url, data=payload, files=files)
         if response.status_code // 100 != 2:
             error = json.loads(response.content, encoding=response.encoding)
+            if error['Result'] == '-9':
+                raise RuntimeError(f"{error['Error']}:\n{error['Description']}")
             raise RuntimeError(f"Online compiler error code {error['Result']}: {error['Error']}")
 
         f = open(to_uwc(filepath), 'wb')
@@ -245,7 +259,6 @@ def get_errordesc(code):
                 return line.split('"')[1]
                 break
         return "(no description available)"
-
 
 def main():
     if os.name != 'nt':
