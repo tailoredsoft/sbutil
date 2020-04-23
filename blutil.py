@@ -1,19 +1,31 @@
 #!/usr/bin/env python3
 """
-blutil.py was a command line tool for programming Laird "SmartBASIC" devices.
+This is a command line tool for programming Laird "SmartBASIC" devices.
+    - Compile and download smartBASIC applications
+    - Download firmware images over the uart
 
-Original work by:
-  Copyright (C)2014 Angus Gratton, released under BSD license as per the LICENSE file.
+Original works by:
+  blutil.py
+    Copyright (C)2014 Angus Gratton, released under BSD license as per the LICENSE file.
 
 Subsequently enhanced by:
   Dimitri Siganos
   Oli Solomons
+  Mahendra Tailor 
 """
 
+##########################################################################################
+# Copyright (C)2014 Angus Gratton, released under BSD license as per the LICENSE file.
+##########################################################################################
 
 #-----------------------------------------------------------------------------
 # constants
 #-----------------------------------------------------------------------------
+#= Serial comms related
+SERIAL_TIMEOUT=2.0  #e.g 2.456 will mean 2456 milliseconds
+SERIAL_DEF_BAUD=115200
+
+#- comilation realted
 ALLOW_ONLINE_COMPILE=True   #Set True to disallow online compiling for security reasons
 URL_XCOMPILE_SERVER='uwterminalx.lairdconnect.com'
 
@@ -28,7 +40,7 @@ def setup_arg_parser():
     parser = argparse.ArgumentParser(
         description='Perform smartBASIC Application or Firmware operations with a Laird module.')
     parser.add_argument('-p', '--port', help="Serial port to connect to",required=True)
-    parser.add_argument('-b', '--baud', type=int, default=115200, help="Baud rate, default=115200")
+    parser.add_argument('-b', '--baud', type=int, default=SERIAL_DEF_BAUD, help=f"Baud rate, default={SERIAL_DEF_BAUD}")
     parser.add_argument('-v','--verbose', action="store_true", help="verbose mode", default=False)
     parser.add_argument('-n','--no-dtr', action="store_true", help="Don't toggle the DTR line as a reset")
     cmd_arg = parser.add_mutually_exclusive_group(required=True)
@@ -64,7 +76,7 @@ class RuntimeError(Exception):
 #-----------------------------------------------------------------------------
 class BLDevice(object):
     def __init__(self, args):
-        self.port = serial.Serial(args.port, args.baud, timeout=2)
+        self.port = serial.Serial(args.port, args.baud, timeout=SERIAL_TIMEOUT)
 
     def writecmd(self, args, expect_response=True, timeout=0.5):
         command = f"AT{'' if args.startswith('+') else ' '}{args}\r"
@@ -181,10 +193,10 @@ class BLDevice(object):
         parts = os.path.splitext(filepath)
         if parts[1] != ".uwc":  # compiled files have .uwc extension
             filepath = "%s.uwc" % (parts[0],)
-        devicename = get_devicename(filepath)
-        print("Uploading %s as %s" % (filepath, devicename))
-        self.writecmd('+DEL "%s" +' % devicename)
-        self.writecmd('+FOW "%s"' % devicename)
+        appname = get_sbappname(filepath)
+        print("Uploading %s as %s" % (filepath, appname))
+        self.writecmd('+DEL "%s" +' % appname)
+        self.writecmd('+FOW "%s"' % appname)
         with open(filepath, "rb") as f:
             for line in chunks(f, 16):
                 row = "".join(["%02x" % x for x in line])
@@ -193,10 +205,14 @@ class BLDevice(object):
         print("Upload success")
 
     def run(self, filepath):
-        devicename = get_devicename(filepath)
-        self.writecmd('')  # check is responding at all
-        print("Running %s..." % devicename)
-        self.writecmd('+RUN "%s"' % devicename, expect_response=False)
+        appname = get_sbappname(filepath)
+        # check is responding at all
+        self.writecmd('')  
+        # send run command
+        print("Running %s..." % appname)
+        self.writecmd('+RUN "%s"' % appname, expect_response=False)
+        # try to read up to 1024 bytes for timeout period
+        self.port.timeout=1.0
         output = self.port.read(1024)
         if len(output):
             if len(output) >= 3 and output[-3:] == b'00\r':
@@ -217,7 +233,7 @@ class BLDevice(object):
         print(output)
 
     def delete(self, filename):
-        filename = get_devicename(filename)
+        filename = get_sbappname(filename)
         print("Removing %s..." % filename)
         self.writecmd('+DEL "%s"' % filename)
         print("Deleted.")
@@ -277,7 +293,7 @@ def chunks(somefile, chunklen):
 
 #-----------------------------------------------------------------------------
 #-----------------------------------------------------------------------------
-def get_devicename(filepath):
+def get_sbappname(filepath):
     """ Given a file path, find an acceptable name on the BL filesystem """
     filename = os.path.split(filepath)[1]
     filename = filename.split('.')[0]
