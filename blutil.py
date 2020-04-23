@@ -28,6 +28,7 @@ SERIAL_DEF_BAUD=115200
 #- comilation realted
 ALLOW_ONLINE_COMPILE=True   #Set True to disallow online compiling for security reasons
 URL_XCOMPILE_SERVER='uwterminalx.lairdconnect.com'
+ONLINE_SB_TEMPFILENAME='temp.sb'
 
 #-----------------------------------------------------------------------------
 # Module imports
@@ -165,7 +166,7 @@ class BLDevice(object):
             file_data = self.do_include(file_data, file_dir)
             file_data = file_data.encode('utf-8')
         #and write it to a temporary file
-        with open('temp.sb','wb') as f:
+        with open(ONLINE_SB_TEMPFILENAME,'wb') as f:
             f.write(file_data)
 
         #post the sb app to be compiled
@@ -184,6 +185,12 @@ class BLDevice(object):
         f = open(to_uwc(filepath), 'wb')
         f.write(response.content)
         f.close()
+        #remove the temporary file if not in verbose mode
+        if not args.verbose:
+            try:
+                os.remove(ONLINE_SB_TEMPFILENAME)
+            except:
+                pass        
         print("Online compilation success")
 
     def upload(self, filepath):
