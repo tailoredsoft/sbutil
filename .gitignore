@@ -4,3 +4,5 @@ compiler/
 *.uwc
 ReadMe.txt
 temp.sb
+codes_old.csv
+__pycache__/*
