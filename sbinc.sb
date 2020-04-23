@@ -1,0 +1,6 @@
+//File sbinc.sb
+print "\nThis is sbinc.sb - start\n"
+#include "sbincba.sb"
+//this is a comment
+#include "sbincbb.sb"
+print "\nThis is sbinc.sb - end\n"
