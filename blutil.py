@@ -43,7 +43,7 @@ def setup_arg_parser():
     parser.add_argument('-p', '--port', help="Serial port to connect to",required=True)
     parser.add_argument('-b', '--baud', type=int, default=SERIAL_DEF_BAUD, help=f"Baud rate, default={SERIAL_DEF_BAUD}")
     parser.add_argument('-v','--verbose', action="store_true", help="verbose mode", default=False)
-    parser.add_argument('-n','--no-dtr', action="store_true", help="Don't toggle the DTR line as a reset")
+    parser.add_argument('-n','--no-break', action="store_true", help="Do not reset with DTR deasserted")
     cmd_arg = parser.add_mutually_exclusive_group(required=True)
     cmd_arg.add_argument('-c', '--compile', help="Compile specified smartBasic file to a .uwc file.", metavar="SBFILE")
     cmd_arg.add_argument('-l', '--load',
@@ -52,10 +52,12 @@ def setup_arg_parser():
     cmd_arg.add_argument('-r', '--run',
                          help="Execute specified smartBasic file on device (if argument is a .sb file it will be compiled and uploaded first, if argument is a .uwc file it will be uploaded first.)",
                          metavar="FILE")
+    cmd_arg.add_argument('-s', '--send',
+                         help="Send the string CMD terminated by \\r",
+                         metavar="CMD")
     cmd_arg.add_argument('--ls', action="store_true", help="List all files uploaded to the device")
     cmd_arg.add_argument('--rm', metavar="FILE", help="Remove specified file from the device")
     cmd_arg.add_argument('--format', action="store_true", help="Erase all stored files from the device")
-    cmd_arg.add_argument('--at', help="Run an AT command", metavar="CMD")
     cmd_arg.add_argument('--listen', action="store_true",
                          help="Listen over serial for incoming messages, e.g. from print statements in a running program")
     return parser
@@ -79,9 +81,9 @@ class BLDevice(object):
     def __init__(self, args):
         self.port = serial.Serial(args.port, args.baud, timeout=SERIAL_TIMEOUT)
 
-    def writecmd(self, args, expect_response=True, timeout=0.5):
-        command = f"AT{'' if args.startswith('+') else ' '}{args}\r"
-        self.port.write(bytearray(command, "ascii"))
+    #when calling this remember to append \r if it is a command
+    def writerawcmd(self, args, expect_response=True, timeout=0.5):
+        self.port.write(bytearray(args, "ascii"))
         if not expect_response:
             return
         response = b''
@@ -93,15 +95,35 @@ class BLDevice(object):
         else:
             if len(response) == 0:
                 raise RuntimeError(
-                    f"Got no response to command {repr(command)}. Not connected or not in interactive mode?")
+                    f"Got no response to command {repr(args)}. Not connected or not in interactive mode?")
             elif len(response) > 4 and response[0:4] == b'\n01\t':
                 errorcode = str(response[4:].decode())[:-1]
                 raise RuntimeError("Device returned error %s: %s" % (errorcode, get_errordesc(errorcode)))
             else:
                 raise RuntimeError("Got unexpected/error response to command 'AT%s': %s" % (args, response))
 
+    def writecmd(self, args, expect_response=True, timeout=0.5):
+        command = f"AT{'' if args.startswith('+') else ' '}{args}\r"
+        return self.writerawcmd(command, expect_response, timeout)
+        
+    def writeraw(self, args):
+        self.port.write(bytearray(args, "ascii"))
+        
     def read_param(self, param):
         return self.writecmd("I %d" % param).split("\t")[-1]
+
+    def reset_into_cmd_mode(self, brk_timeout=0.1, post_timeout=0.5):
+        if args.verbose:
+            print("Resetting board via DTR and UART_BREAK into cmd mode ...")
+        self.port.setDTR(False)
+        self.port.break_condition=True
+        time.sleep(brk_timeout)
+        self.port.break_condition=False
+        self.port.setDTR(True)
+        time.sleep(post_timeout)
+        self.writecmd('')
+        if args.verbose:
+            print("Cmd mode")
 
     def detect_model(self):
         print(f"Detecting...")
@@ -139,7 +161,8 @@ class BLDevice(object):
         print("Compilation success")
 
     def online_compile(self, filepath):
-        print('Using online compiler (Local compiler missing)')
+        if args.verbose:
+            print('Using online compiler (Local compiler missing)')
         
         #get the xcompiler model index from online server
         url = f'http://{URL_XCOMPILE_SERVER}/supported.php?JSON=1'
@@ -235,24 +258,27 @@ class BLDevice(object):
             print("No immediate output, program probably running...")
 
     def list(self):
-        print("Listing files...")
+        if args.verbose:
+            print("Listing files...")
         output = self.writecmd('+DIR')
         print(output)
 
     def delete(self, filename):
         filename = get_sbappname(filename)
-        print("Removing %s..." % filename)
+        if args.verbose:
+            print("Removing %s..." % filename)
         self.writecmd('+DEL "%s"' % filename)
-        print("Deleted.")
+        if args.verbose:
+            print("Deleted all files")
 
     def format(self):
-        print("Formatting device...")
-        self.writecmd('Z', timeout=5)
-        self.writecmd('')
-        self.writecmd('&F 1', expect_response=False)
+        if args.verbose:
+           print("Formatting filesystem only...")
+        self.writerawcmd('AT&F 1\r', timeout=10)
         time.sleep(0.2)
         self.port.read(1024)  # discard anything
-        print("Format complete. Reconnecting...")
+        if args.verbose:
+            print("Format complete. Reconnecting...")
         self.writecmd('')
 
     def do_include(self, file, dirname):
@@ -363,11 +389,9 @@ def main():
     if args.run:
         ops += ["run"]
 
-    if (args.load or args.run or args.rm or args.ls or args.format ) and not args.no_dtr:
-        print("Resetting board via DTR...")
-        device.port.setDTR(False)
-        time.sleep(0.1)
-        device.port.setDTR(True)
+    #if break into command mode via reset/urt_break then do so
+    if not args.no_break:
+        device.reset_into_cmd_mode()
 
     if args.compile:
         device.detect_model()
@@ -387,8 +411,9 @@ def main():
         device.upload(args.load)
     if args.run:
         device.run(args.run)
-    if args.at:
-        print(device.writecmd(args.at, timeout=5))
+    if args.send:
+        cmdstr=f"{args.send}\r"
+        print(device.writerawcmd(cmdstr, timeout=5))
         print("Command completed")
     if args.listen:
         device.listen()
