@@ -1,4 +1,6 @@
 *~
 compiler/
 *.exe
+*.uwc
 ReadMe.txt
+temp.sb

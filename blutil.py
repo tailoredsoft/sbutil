@@ -1,51 +1,70 @@
 #!/usr/bin/env python3
 """
-blutil.py is a command line tool for programming BL-600SA "SmartBASIC" devices.
+blutil.py was a command line tool for programming Laird "SmartBASIC" devices.
 
-See http://projectgus.com/2014/03/laird-bl600-modules for more details
+Original work by:
+  Copyright (C)2014 Angus Gratton, released under BSD license as per the LICENSE file.
 
-Copyright (C)2014 Angus Gratton, released under BSD license as per the LICENSE file.
+Subsequently enhanced by:
+  Dimitri Siganos
+  Oli Solomons
 """
 
+
+#-----------------------------------------------------------------------------
+# constants
+#-----------------------------------------------------------------------------
+ALLOW_ONLINE_COMPILE=True   #Set True to disallow online compiling for security reasons
+URL_XCOMPILE_SERVER='uwterminalx.lairdconnect.com'
+
+#-----------------------------------------------------------------------------
+# Module imports
+#-----------------------------------------------------------------------------
 import argparse, serial, time, subprocess, sys, os, re, tempfile, requests, json
 
-parser = argparse.ArgumentParser(
-    description='Perform various operations with a BL600 module. The -m option can only be used instead of -p when compiling using the -c flag. -p on the other hand is compatible with all other argument choices.')
-device_arg = parser.add_mutually_exclusive_group(required=True)
-device_arg.add_argument('-p', '--port', help="Serial port to connect to")
-device_arg.add_argument('-m', '--model',
-                        help="Specify (instead of detecting) the model number, see command output for example model string")
-parser.add_argument('-b', '--baud', type=int, default=9600, help="Baud rate for connection")
-parser.add_argument('--no-dtr', action="store_true", help="Don't toggle the DTR line as a reset")
-cmd_arg = parser.add_mutually_exclusive_group(required=True)
-cmd_arg.add_argument('-c', '--compile', help="Compile specified smartBasic file to a .uwc file.", metavar="BASICFILE")
-cmd_arg.add_argument('-l', '--load',
-                     help="Upload specified smartBasic file to BL600 (if argument is a .sb file it will be compiled first.)",
-                     metavar="FILE")
-cmd_arg.add_argument('-r', '--run',
-                     help="Execute specified smartBasic file on BL600 (if argument is a .sb file it will be compiled and uploaded first, if argument is a .uwc file it will be uploaded first.)",
-                     metavar="FILE")
-cmd_arg.add_argument('--ls', action="store_true", help="List all files uploaded to the BL600")
-cmd_arg.add_argument('--rm', metavar="FILE", help="Remove specified file from the BL600")
-cmd_arg.add_argument('--format', action="store_true", help="Erase all stored files from the BL600")
-cmd_arg.add_argument('--at', help="Run an AT command")
-cmd_arg.add_argument('--listen', action="store_true",
-                     help="Listen over serial for incoming messages, e.g. from print statements in a running program")
+#-----------------------------------------------------------------------------
+#-----------------------------------------------------------------------------
+def setup_arg_parser():
+    parser = argparse.ArgumentParser(
+        description='Perform smartBASIC Application or Firmware operations with a Laird module.')
+    parser.add_argument('-p', '--port', help="Serial port to connect to",required=True)
+    parser.add_argument('-b', '--baud', type=int, default=115200, help="Baud rate, default=115200")
+    parser.add_argument('-v','--verbose', action="store_true", help="verbose mode", default=False)
+    parser.add_argument('-n','--no-dtr', action="store_true", help="Don't toggle the DTR line as a reset")
+    cmd_arg = parser.add_mutually_exclusive_group(required=True)
+    cmd_arg.add_argument('-c', '--compile', help="Compile specified smartBasic file to a .uwc file.", metavar="SBFILE")
+    cmd_arg.add_argument('-l', '--load',
+                         help="Upload specified smartBasic file to device (if argument is a .sb file it will be compiled first.)",
+                         metavar="FILE")
+    cmd_arg.add_argument('-r', '--run',
+                         help="Execute specified smartBasic file on device (if argument is a .sb file it will be compiled and uploaded first, if argument is a .uwc file it will be uploaded first.)",
+                         metavar="FILE")
+    cmd_arg.add_argument('--ls', action="store_true", help="List all files uploaded to the device")
+    cmd_arg.add_argument('--rm', metavar="FILE", help="Remove specified file from the device")
+    cmd_arg.add_argument('--format', action="store_true", help="Erase all stored files from the device")
+    cmd_arg.add_argument('--at', help="Run an AT command", metavar="CMD")
+    cmd_arg.add_argument('--listen', action="store_true",
+                         help="Listen over serial for incoming messages, e.g. from print statements in a running program")
+    return parser
 
-
+#-----------------------------------------------------------------------------
+#-----------------------------------------------------------------------------
 def to_uwc(filepath):
     parts = os.path.splitext(filepath)
     return "%s.uwc" % parts[0]
 
 
+#-----------------------------------------------------------------------------
+#-----------------------------------------------------------------------------
 class RuntimeError(Exception):
     pass
 
 
+#-----------------------------------------------------------------------------
+#-----------------------------------------------------------------------------
 class BLDevice(object):
     def __init__(self, args):
-        if args.model is None:
-            self.port = serial.Serial(args.port, args.baud, timeout=2)
+        self.port = serial.Serial(args.port, args.baud, timeout=2)
 
     def writecmd(self, args, expect_response=True, timeout=0.5):
         command = f"AT{'' if args.startswith('+') else ' '}{args}\r"
@@ -64,7 +83,7 @@ class BLDevice(object):
                     f"Got no response to command {repr(command)}. Not connected or not in interactive mode?")
             elif len(response) > 4 and response[0:4] == b'\n01\t':
                 errorcode = str(response[4:].decode())[:-1]
-                raise RuntimeError("BL600 returned error %s: %s" % (errorcode, get_errordesc(errorcode)))
+                raise RuntimeError("Device returned error %s: %s" % (errorcode, get_errordesc(errorcode)))
             else:
                 raise RuntimeError("Got unexpected/error response to command 'AT%s': %s" % (args, response))
 
@@ -72,21 +91,31 @@ class BLDevice(object):
         return self.writecmd("I %d" % param).split("\t")[-1]
 
     def detect_model(self):
-        model = self.read_param(0)
-        revision = self.read_param(13)
-        print("Detected model %s %s" % (model, revision))
-        self.model = "%s_%s" % (model, revision.replace(" ", "_"))
+        print(f"Detecting...")
+        self.model = self.read_param(0)
+        print(f"    Device   = {self.model}")
+        self.version = self.read_param(3)
+        print(f"    Version  = {self.version}")
+        self.langhash = self.read_param(13).split()
+        if args.verbose:
+            print(f"    Lang Hash= {self.langhash[0]} {self.langhash[1]}")
+        self.xcompname = f"XComp_{self.model}_{self.langhash[0]}_{self.langhash[1]}.exe"
+        if args.verbose:
+            print(f"Xcompiler name: {self.xcompname}")
 
     def compile(self, filepath):
         blutil_dir = os.path.dirname(sys.argv[0])
-        compiler = os.path.join(blutil_dir, "XComp_%s.exe" % (self.model,))
+        compiler = os.path.join(blutil_dir, self.xcompname)
 
         filepath = os.path.expanduser(filepath)
         filepath = os.path.abspath(filepath)
         if not os.path.exists(filepath):
             raise RuntimeError("File '%s' not found" % filepath)
         if not os.path.exists(compiler):
-            return self.online_compile(filepath)
+            if ALLOW_ONLINE_COMPILE:
+                return self.online_compile(filepath)
+            else:
+                raise RuntimeError("Compilation failed")            
         print("Compiling %s with %s..." % (filepath, os.path.basename(compiler)))
         args = [compiler, filepath]
         if os.name != 'nt':
@@ -97,40 +126,53 @@ class BLDevice(object):
         print("Compilation success")
 
     def online_compile(self, filepath):
-        print('Using the online compiler')
-        url = 'http://uwterminalx.no-ip.org/xcompile.php?JSON=1'
+        print('Using online compiler (Local compiler missing)')
+        
+        #get the xcompiler model index from online server
+        url = f'http://{URL_XCOMPILE_SERVER}/supported.php?JSON=1'
+        query=f"{url}&Dev={self.model}&HashA={self.langhash[0]}&HashB={self.langhash[1]}"
+        if args.verbose:
+            print(f"Query={query}")
+        response = requests.get(query)
+        if args.verbose:
+            print(f"get resp_code={response.status_code}")
+        if response.status_code // 100 != 2:
+            error = json.loads(response.content, encoding=response.encoding)
+            raise RuntimeError(f"Online compiler error code {error['Result']}: {error['Error']}")
+        qresp=response.content.decode()
+        if args.verbose:
+            print(f"QueryResp={response.content.decode()}")
+        qresp=eval(qresp)
+        #generate the payload for the PUT that comes next
+        payload = {'file_XComp': f"{qresp['ID']}"}
 
-        with open('devices.json','r') as f:
-            devices = json.load(f)
-
-        devices = dict(devices)
-
-        model = self.read_param(0)
-        firmware_code = self.read_param(3)
-        model_firmwares = dict((firmware[1],firmware[0]) for firmware in devices[model])
-        firmware_index = model_firmwares[firmware_code]
-        payload = {'file_XComp': f"{model}_{firmware_index}"}
-
+        #read the sb app source and replace #includes recursively with the code
         with open(filepath, 'r') as f:
             file_data = f.read()
             file_dir = os.path.dirname(filepath)
             file_data = self.do_include(file_data, file_dir)
             file_data = file_data.encode('utf-8')
-
+        #and write it to a temporary file
         with open('temp.sb','wb') as f:
             f.write(file_data)
 
+        #post the sb app to be compiled
+        url = f'http://{URL_XCOMPILE_SERVER}/xcompile.php?JSON=1'
         files = {'file_sB': (os.path.basename(filepath), file_data, 'application/octet-stream')}
         response = requests.post(url, data=payload, files=files)
+        if args.verbose:
+            print('resp_code=%d'%(response.status_code))
         if response.status_code // 100 != 2:
             error = json.loads(response.content, encoding=response.encoding)
             if error['Result'] == '-9':
                 raise RuntimeError(f"{error['Error']}:\n{error['Description']}")
             raise RuntimeError(f"Online compiler error code {error['Result']}: {error['Error']}")
 
+        #save the compiled sb app to a file
         f = open(to_uwc(filepath), 'wb')
         f.write(response.content)
         f.close()
+        print("Online compilation success")
 
     def upload(self, filepath):
         filepath = os.path.expanduser(filepath)
@@ -181,7 +223,7 @@ class BLDevice(object):
         print("Deleted.")
 
     def format(self):
-        print("Formatting BL600...")
+        print("Formatting device...")
         self.writecmd('Z', timeout=5)
         self.writecmd('')
         self.writecmd('&F 1', expect_response=False)
@@ -223,6 +265,8 @@ class BLDevice(object):
             print('\n')
 
 
+#-----------------------------------------------------------------------------
+#-----------------------------------------------------------------------------
 def chunks(somefile, chunklen):
     while True:
         chunk = somefile.read(chunklen)
@@ -231,6 +275,8 @@ def chunks(somefile, chunklen):
         yield chunk
 
 
+#-----------------------------------------------------------------------------
+#-----------------------------------------------------------------------------
 def get_devicename(filepath):
     """ Given a file path, find an acceptable name on the BL filesystem """
     filename = os.path.split(filepath)[1]
@@ -238,6 +284,8 @@ def get_devicename(filepath):
     return re.sub(r'[:*?"<>|]', "", filename)[:24]
 
 
+#-----------------------------------------------------------------------------
+#-----------------------------------------------------------------------------
 def test_wine():
     """ Check the wine installation is OK """
     try:
@@ -250,6 +298,8 @@ def test_wine():
         sys.exit(2)
 
 
+#-----------------------------------------------------------------------------
+#-----------------------------------------------------------------------------
 def get_errordesc(code):
     """ Go through file with list of error codes to find description """
     blutil_dir = os.path.dirname(sys.argv[0])
@@ -260,9 +310,13 @@ def get_errordesc(code):
                 break
         return "(no description available)"
 
+#-----------------------------------------------------------------------------
+#-----------------------------------------------------------------------------
 def main():
+    parser=setup_arg_parser()
     if os.name != 'nt':
         test_wine()
+    global args
     args = parser.parse_args()
     device = BLDevice(args)
 
@@ -286,15 +340,13 @@ def main():
     if args.run:
         ops += ["run"]
 
-    if (args.load or args.run or args.rm or args.ls or args.format or args.model is None) and not args.no_dtr:
+    if (args.load or args.run or args.rm or args.ls or args.format ) and not args.no_dtr:
         print("Resetting board via DTR...")
         device.port.setDTR(False)
         time.sleep(0.1)
         device.port.setDTR(True)
 
-    if args.model is not None:
-        device.model = args.model.replace(" ", "_")
-    elif args.compile:
+    if args.compile:
         device.detect_model()
 
     if len(ops) > 0:
@@ -319,6 +371,8 @@ def main():
         device.listen()
 
 
+#-----------------------------------------------------------------------------
+#-----------------------------------------------------------------------------
 if __name__ == "__main__":
     try:
         main()
