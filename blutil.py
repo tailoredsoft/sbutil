@@ -44,6 +44,9 @@ def setup_arg_parser():
     parser.add_argument('-b', '--baud', type=int, default=SERIAL_DEF_BAUD, help=f"Baud rate, default={SERIAL_DEF_BAUD}")
     parser.add_argument('-v','--verbose', action="store_true", help="verbose mode", default=False)
     parser.add_argument('-n','--no-break', action="store_true", help="Do not reset with DTR deasserted")
+    parser.add_argument('-t', '--timeout',
+                         help="Timeout for commands like --send", default=SERIAL_TIMEOUT,type=float,
+                         metavar="TIMEOUT")
     cmd_arg = parser.add_mutually_exclusive_group(required=True)
     cmd_arg.add_argument('-c', '--compile', help="Compile specified smartBasic file to a .uwc file.", metavar="SBFILE")
     cmd_arg.add_argument('-l', '--load',
@@ -53,7 +56,7 @@ def setup_arg_parser():
                          help="Execute specified smartBasic file on device (if argument is a .sb file it will be compiled and uploaded first, if argument is a .uwc file it will be uploaded first.)",
                          metavar="FILE")
     cmd_arg.add_argument('-s', '--send',
-                         help="Send the string CMD terminated by \\r",
+                         help="Send the string CMD terminated by and listen for {SERIAL_TIMEOUT} seconds \\r",
                          metavar="CMD")
     cmd_arg.add_argument('--ls', action="store_true", help="List all files uploaded to the device")
     cmd_arg.add_argument('--rm', metavar="FILE", help="Remove specified file from the device")
@@ -413,7 +416,7 @@ def main():
         device.run(args.run)
     if args.send:
         cmdstr=f"{args.send}\r"
-        print(device.writerawcmd(cmdstr, timeout=5))
+        print(device.writerawcmd(cmdstr, timeout=args.timeout))
         print("Command completed")
     if args.listen:
         device.listen()
