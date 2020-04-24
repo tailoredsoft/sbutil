@@ -10,8 +10,10 @@ import time
 
 VERBOSELEVEL=2
 
-DEVICE_TYPE_IG60  = 'IG60'
-DEVICE_TYPE_BL654 = 'BL654'
+DEVICE_TYPE_BL654IG  = 'BL654IG'
+DEVICE_TYPE_BL654    = 'BL654'
+DEVICE_TYPE_BL653    = 'BL653'
+DEVICE_TYPE_BL652    = 'BL652'
 
 SERIAL_TIMEOUT_SEC = 3
 DATA_BLOCK_SIZE=252      #16 to 252, uwflash uses 128, value must be divisible by 4
@@ -55,29 +57,39 @@ def init_processor(dev_type, port, baudrate):
     """
     Instantiates and returns the requested processor
     """
-    if dev_type == DEVICE_TYPE_IG60:
+    if dev_type == DEVICE_TYPE_BL654IG:
         # Import the IG60_BL654 custom processor
         from uwf_processor_ig60_bl654 import UwfProcessorIg60Bl654
-
-        # Initialize the IG60 BL654 processor
         processor = UwfProcessorIg60Bl654(port, baudrate)
         if VERBOSELEVEL>=2:
-            print(f"Initialise IG60")
+            print(f"Initialise {dev_type}")
         
     elif dev_type == DEVICE_TYPE_BL654:
         # Import the BL654 custom processor
         from uwf_processor_bl654 import UwfProcessorBl654
-
-        # Initialize the IG60 BL654 processor
         processor = UwfProcessorBl654(port, baudrate)
         if VERBOSELEVEL>=2:
-            print(f"Initialise BL654")
+            print(f"Initialise {dev_type}")
+        
+    elif dev_type == DEVICE_TYPE_BL653:
+        # Import the BL653 custom processor
+        from uwf_processor_bl653 import UwfProcessorBl653
+        processor = UwfProcessorBl653(port, baudrate)
+        if VERBOSELEVEL>=2:
+            print(f"Initialise {dev_type}")
+        
+    elif dev_type == DEVICE_TYPE_BL652:
+        # Import the BL653 custom processor
+        from uwf_processor_bl652 import UwfProcessorBl652
+        processor = UwfProcessorBl652(port, baudrate)
+        if VERBOSELEVEL>=2:
+            print(f"Initialise {dev_type}")
         
     else:
         # Use the generic processor
         processor = UwfProcessor(port, baudrate)
         if VERBOSELEVEL>=2:
-            print(f"Initialise generic")
+            print(f"Initialise {dev_type} as GENERIC")
 
     processor.enter_bootloader()
 

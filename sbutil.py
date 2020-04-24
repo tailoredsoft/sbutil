@@ -23,6 +23,7 @@ Subsequently enhanced by:
 #-----------------------------------------------------------------------------
 
 VERBOSELEVEL=0
+DEFAULT_MODULE='BL654'
 
 #-----------------------------------------------------------------------------
 # Module imports
@@ -37,7 +38,10 @@ import serial
 #-----------------------------------------------------------------------------
 def setup_arg_parser():
     parser = blutilc.argparse.ArgumentParser(
-        description='Perform smartBASIC Application or Firmware operations with a Laird module.')
+        description=
+            """Perform smartBASIC Application or Firmware operations with a Laird module.
+                 Module type can be: BL654 or BL654IG or BL652 or BL653 or GENERIC
+            """)
     parser.add_argument('-p', '--port', help="Serial port to connect to",required=True)
     parser.add_argument('-b', '--baud', type=int, default=blutilc.SERIAL_DEF_BAUD, help=f"Baud rate, default={blutilc.SERIAL_DEF_BAUD}")
     parser.add_argument('-v','--verbose', action="store_true", help="verbose mode", default=False)
@@ -45,6 +49,7 @@ def setup_arg_parser():
     parser.add_argument('-t', '--timeout',
                          help="Timeout for commands like --send", default=blutilc.SERIAL_TIMEOUT,type=float,
                          metavar="TIMEOUT")
+    parser.add_argument('-m', '--module', default=DEFAULT_MODULE, help=f"Module type, default={DEFAULT_MODULE}")
     cmd_arg = parser.add_mutually_exclusive_group(required=True)
     cmd_arg.add_argument('-f', '--firmware', help="Download a .uwf firmware file to device", metavar="UWF_FILE")
     cmd_arg.add_argument('-c', '--compile', help="Compile specified smartBasic file to a .uwc file.", metavar="SBFILE")
@@ -129,7 +134,7 @@ def main():
             device.listen()
     else:
         #download firmware
-        uwfloader.loadfirmware(args.port,args.baud,args.firmware,'BL654')
+        uwfloader.loadfirmware(args.port,args.baud,args.firmware,args.module)
         
         
 #-----------------------------------------------------------------------------
