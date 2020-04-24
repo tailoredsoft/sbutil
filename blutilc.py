@@ -21,6 +21,8 @@ Subsequently enhanced by:
 #-----------------------------------------------------------------------------
 # constants
 #-----------------------------------------------------------------------------
+VERBOSELEVEL=0
+
 #= Serial comms related
 SERIAL_TIMEOUT=2.0  #e.g 2.456 will mean 2456 milliseconds
 SERIAL_DEF_BAUD=115200

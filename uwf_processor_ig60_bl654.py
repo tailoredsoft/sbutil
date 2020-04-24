@@ -2,6 +2,8 @@ import dbus
 from uwf_processor import UwfProcessor
 from uwf_processor import ERROR_REGISTER_DEVICE
 
+VERBOSELEVEL=0
+
 BT_BOOTLOADER_MODE = 0
 BT_SMART_BASIC_MODE = 1
 

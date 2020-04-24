@@ -8,12 +8,13 @@ import binascii
 import struct
 import time
 
-DEBUGLEVEL=3
+VERBOSELEVEL=2
 
 DEVICE_TYPE_IG60  = 'IG60'
 DEVICE_TYPE_BL654 = 'BL654'
 
 SERIAL_TIMEOUT_SEC = 3
+DATA_BLOCK_SIZE=252      #16 to 252, uwflash uses 128, value must be divisible by 4
 
 COMMAND_ENTER_BOOTLOADER = 'AT+FUP\r'
 COMMAND_SYNC_WITH_BOOTLOADER = '80'
@@ -60,8 +61,8 @@ def init_processor(dev_type, port, baudrate):
 
         # Initialize the IG60 BL654 processor
         processor = UwfProcessorIg60Bl654(port, baudrate)
-        if DEBUGLEVEL>=3:
-            print(f"#DBG# Initialise IG60")
+        if VERBOSELEVEL>=2:
+            print(f"Initialise IG60")
         
     elif dev_type == DEVICE_TYPE_BL654:
         # Import the BL654 custom processor
@@ -69,14 +70,14 @@ def init_processor(dev_type, port, baudrate):
 
         # Initialize the IG60 BL654 processor
         processor = UwfProcessorBl654(port, baudrate)
-        if DEBUGLEVEL>=3:
-            print(f"#DBG# Initialise BL654")
+        if VERBOSELEVEL>=2:
+            print(f"Initialise BL654")
         
     else:
         # Use the generic processor
         processor = UwfProcessor(port, baudrate)
-        if DEBUGLEVEL>=3:
-            print(f"#DBG# Initialise generic")
+        if VERBOSELEVEL>=2:
+            print(f"Initialise generic")
 
     processor.enter_bootloader()
 
@@ -96,7 +97,7 @@ class UwfProcessor():
         self.sector_size = 0
 
         # Number of bytes of data to write for each write command
-        self.write_block_size = 128
+        self.write_block_size = DATA_BLOCK_SIZE
 
         # The number of data blocks writes to perform before verifying
         self.verify_write_limit = 8
@@ -116,8 +117,8 @@ class UwfProcessor():
         return self.ser.read(resp_size)
 
     def enter_bootloader(self):
-        if DEBUGLEVEL>=3:
-            print(f"#DBG# Enter Bootloader mode")
+        if VERBOSELEVEL>=2:
+            print(f"Entering Bootloader mode..")
             
         result = True
 
@@ -129,6 +130,8 @@ class UwfProcessor():
         response = self.ser.readline()
         if len(response) != 0:
             result = False
+        elif VERBOSELEVEL>=2:
+            print(f"In Bootloader")
 
         return result
 
@@ -148,9 +151,9 @@ class UwfProcessor():
                 # Send the target platform data
                 platform_command = bytearray(COMMAND_PLATFORM_CHECK, 'utf-8')
                 platform_id = file.read(data_length)
-                if DEBUGLEVEL>=3:
+                if VERBOSELEVEL>=2:
                     targetId = struct.unpack('I', platform_id)[0]
-                    print(f"#DBG# Platform: id={'0x%08X'%(targetId)}")
+                    print(f"Platform: id={'0x%08X'%(targetId)}")
                 port_cmd_bytes = platform_command + platform_id
                 response = self.write_to_comm(port_cmd_bytes, RESPONSE_ACKNOWLEDGE_SIZE)
 
@@ -184,8 +187,8 @@ class UwfProcessor():
         bank_algo = struct.unpack('B', register_device_data[UWF_OFFSET_BANK_SIZE:UWF_OFFSET_BANK_ALGO])[0]
         self.mem_bank_algo[handle]=bank_algo
         
-        if DEBUGLEVEL>=3:
-            print(f"#DBG# Register Device: hndl={handle} addr={base_address} banks={num_banks} size={bank_size} algo={bank_algo}")
+        if VERBOSELEVEL>=2:
+            print(f"Register Device: hndl={handle} addr={base_address} banks={num_banks} size={bank_size} algo={bank_algo}")
 
         self.registered = True
 
@@ -195,8 +198,8 @@ class UwfProcessor():
         select_device_data = file.read(data_length)
         self.selected_handle = struct.unpack('B', select_device_data[:UWF_OFFSET_HANDLE])[0]
         self.selected_bank = struct.unpack('B', select_device_data[UWF_OFFSET_HANDLE:UWF_OFFSET_BANK])[0]
-        if DEBUGLEVEL>=3:
-            print(f"#DBG# Select Device: hndl={self.selected_handle} bank={self.selected_bank}")
+        if VERBOSELEVEL>=2:
+            print(f"Select Device: hndl={self.selected_handle} bank={self.selected_bank}")
 
         return None
 
@@ -205,8 +208,8 @@ class UwfProcessor():
         sector_map_data = file.read(data_length)
         self.sectors = struct.unpack('<I', sector_map_data[:UWF_OFFSET_SECTORS])[0]
         self.sector_size = struct.unpack('<I', sector_map_data[UWF_OFFSET_SECTORS:UWF_OFFSET_SECTOR_SIZE])[0]
-        if DEBUGLEVEL>=3:
-            print(f"#DBG# Sector Map: sectors={self.sectors} size={self.sector_size}")
+        if VERBOSELEVEL>=2:
+            print(f"Sector Map: sectors={self.sectors} size={self.sector_size}")
 
         return None
 
@@ -221,8 +224,8 @@ class UwfProcessor():
             erase_data = file.read(data_length)
             start = self.mem_base_address[self.selected_handle] + struct.unpack('<I', erase_data[:UWF_OFFSET_ERASE_START_ADDR])[0]
             size = struct.unpack('<I', erase_data[UWF_OFFSET_ERASE_START_ADDR:UWF_OFFSET_ERASE_SIZE])[0]
-            if DEBUGLEVEL>=3:
-                print(f"#DBG# Erase Block: start={start} size={size}")
+            if VERBOSELEVEL>=2:
+                print(f"Erase Block: start={start} size={size}")
             
             if size <= self.mem_bank_size[self.selected_handle]:
                 erase_command = bytearray(COMMAND_ERASE_SECTOR, 'utf-8')
@@ -237,10 +240,14 @@ class UwfProcessor():
 
                     start += self.sector_size
                     size -= self.sector_size
+                    if VERBOSELEVEL>=2:
+                        print('.',end='',flush=True)
                 else:
                     self.erased = True
             else:
                 error = ERROR_ERASE_BLOCKS.format('Erase block size > bank size')
+            if VERBOSELEVEL>=2:
+                print('.',end='\n',flush=True)
         else:
             error = ERROR_ERASE_BLOCKS.format('Target platform, register device, or sector map commands not yet processed')
 
@@ -264,8 +271,8 @@ class UwfProcessor():
             offset = self.mem_base_address[self.selected_handle] + struct.unpack('<I', write_data[:UWF_OFFSET_WRITE_OFFSET])[0]
             flags = struct.unpack('<I', write_data[UWF_OFFSET_WRITE_OFFSET:UWF_OFFSET_WRITE_FLAGS])[0]
             remaining_data_size = data_length - UWF_WRITE_BLOCK_HDR_LENGTH
-            if DEBUGLEVEL>=3:
-                print(f"#DBG# Write Block: start={offset} flags={flags} len={remaining_data_size}")
+            if VERBOSELEVEL>=2:
+                print(f"Write Block: start={offset} flags={flags} len={remaining_data_size}")
 
             if remaining_data_size <= self.mem_bank_size[self.selected_handle]:
                 verify_start_addr = struct.pack('<I', offset)
@@ -276,6 +283,9 @@ class UwfProcessor():
                     else:
                         bytes_to_write = self.write_block_size
 
+                    if VERBOSELEVEL>=2:
+                        print('.',end='',flush=True)
+                        
                     # Send the write command
                     write_command = bytearray(COMMAND_WRITE_SECTOR, 'utf-8')
                     start_addr = struct.pack('<I', offset)
@@ -338,6 +348,8 @@ class UwfProcessor():
                         break
                 else:
                     self.write_complete = True
+                if VERBOSELEVEL>=2:
+                    print('.',end='\n',flush=True)
             else:
                 error = ERROR_WRITE_BLOCKS.format('Data to write > bank size')
         else:
@@ -347,14 +359,15 @@ class UwfProcessor():
 
     def process_command_unregister(self, file, data_length):
         unregister_device_data = file.read(data_length)
-        if DEBUGLEVEL>=3:
-            print(f"#DBG# Unregister Device: hndl={unregister_device_data}")
+        handle = struct.unpack('B', unregister_device_data[:UWF_OFFSET_HANDLE])[0]
+        if VERBOSELEVEL>=2:
+            print(f"Unregister Device: hndl={handle}")
 
         return None
 
     def reset_via_uartbreak(self,brk_timeout=0.1, post_timeout=0.5):
-        if DEBUGLEVEL>=3:
-            print(f"#DBG# Reseting via uart_break")
+        if VERBOSELEVEL>=2:
+            print(f"Reseting via uart_break")
         self.ser.setDTR(False)
         self.ser.break_condition=True
         time.sleep(brk_timeout)
@@ -364,6 +377,8 @@ class UwfProcessor():
         return None
             
     def process_reboot(self):
+        if VERBOSELEVEL>=2:
+            print(f"Reboot")
         port_cmd_bytes = bytearray(COMMAND_REBOOT_BOOTLOADER, 'utf-8')
         self.ser.write(port_cmd_bytes)
 

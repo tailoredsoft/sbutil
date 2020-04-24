@@ -22,7 +22,7 @@ Subsequently enhanced by:
 # constants
 #-----------------------------------------------------------------------------
 
-DEBUGLEVEL=3
+VERBOSELEVEL=0
 
 #-----------------------------------------------------------------------------
 # Module imports
@@ -72,7 +72,7 @@ def main():
         test_wine()
     global args
     args = parser.parse_args()
-
+    
     if args.firmware is None:
         #make the args visible to blutilc
         blutilc.args=args
@@ -128,10 +128,7 @@ def main():
         if args.listen:
             device.listen()
     else:
-        #if break into command mode via reset/urt_break then do so
-        #if not args.no_break:
-        #    device.reset_into_cmd_mode()
-        #print(f"uwfloader.loadfirmware({args.port},{args.baud},{args.firmware},'BL654')")
+        #download firmware
         uwfloader.loadfirmware(args.port,args.baud,args.firmware,'BL654')
         
         

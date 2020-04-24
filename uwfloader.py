@@ -9,7 +9,7 @@ import serial
 import struct
 import uwf_processor
 
-DEBUGLEVEL=3
+VERBOSELEVEL=0
 
 EXIT_CODE_SUCCESS = 0
 
