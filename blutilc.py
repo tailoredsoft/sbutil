@@ -37,33 +37,34 @@ import argparse, serial, time, subprocess, sys, os, re, tempfile, requests, json
 
 #-----------------------------------------------------------------------------
 #-----------------------------------------------------------------------------
-def setup_arg_parser():
-    parser = argparse.ArgumentParser(
-        description='Perform smartBASIC Application or Firmware operations with a Laird module.')
-    parser.add_argument('-p', '--port', help="Serial port to connect to",required=True)
-    parser.add_argument('-b', '--baud', type=int, default=SERIAL_DEF_BAUD, help=f"Baud rate, default={SERIAL_DEF_BAUD}")
-    parser.add_argument('-v','--verbose', action="store_true", help="verbose mode", default=False)
-    parser.add_argument('-n','--no-break', action="store_true", help="Do not reset with DTR deasserted")
-    parser.add_argument('-t', '--timeout',
-                         help="Timeout for commands like --send", default=SERIAL_TIMEOUT,type=float,
-                         metavar="TIMEOUT")
-    cmd_arg = parser.add_mutually_exclusive_group(required=True)
-    cmd_arg.add_argument('-c', '--compile', help="Compile specified smartBasic file to a .uwc file.", metavar="SBFILE")
-    cmd_arg.add_argument('-l', '--load',
-                         help="Upload specified smartBasic file to device (if argument is a .sb file it will be compiled first.)",
-                         metavar="FILE")
-    cmd_arg.add_argument('-r', '--run',
-                         help="Execute specified smartBasic file on device (if argument is a .sb file it will be compiled and uploaded first, if argument is a .uwc file it will be uploaded first.)",
-                         metavar="FILE")
-    cmd_arg.add_argument('-s', '--send',
-                         help="Send the string CMD terminated by and listen for {SERIAL_TIMEOUT} seconds \\r",
-                         metavar="CMD")
-    cmd_arg.add_argument('--ls', action="store_true", help="List all files uploaded to the device")
-    cmd_arg.add_argument('--rm', metavar="FILE", help="Remove specified file from the device")
-    cmd_arg.add_argument('--format', action="store_true", help="Erase all stored files from the device")
-    cmd_arg.add_argument('--listen', action="store_true",
-                         help="Listen over serial for incoming messages, e.g. from print statements in a running program")
-    return parser
+if __name__ == "__main__":
+    def setup_arg_parser():
+        parser = argparse.ArgumentParser(
+            description='Perform smartBASIC Application or Firmware operations with a Laird module.')
+        parser.add_argument('-p', '--port', help="Serial port to connect to",required=True)
+        parser.add_argument('-b', '--baud', type=int, default=SERIAL_DEF_BAUD, help=f"Baud rate, default={SERIAL_DEF_BAUD}")
+        parser.add_argument('-v','--verbose', action="store_true", help="verbose mode", default=False)
+        parser.add_argument('-n','--no-break', action="store_true", help="Do not reset with DTR deasserted")
+        parser.add_argument('-t', '--timeout',
+                             help="Timeout for commands like --send", default=SERIAL_TIMEOUT,type=float,
+                             metavar="TIMEOUT")
+        cmd_arg = parser.add_mutually_exclusive_group(required=True)
+        cmd_arg.add_argument('-c', '--compile', help="Compile specified smartBasic file to a .uwc file.", metavar="SBFILE")
+        cmd_arg.add_argument('-l', '--load',
+                             help="Upload specified smartBasic file to device (if argument is a .sb file it will be compiled first.)",
+                             metavar="FILE")
+        cmd_arg.add_argument('-r', '--run',
+                             help="Execute specified smartBasic file on device (if argument is a .sb file it will be compiled and uploaded first, if argument is a .uwc file it will be uploaded first.)",
+                             metavar="FILE")
+        cmd_arg.add_argument('-s', '--send',
+                             help="Send the string CMD terminated by and listen for {SERIAL_TIMEOUT} seconds \\r",
+                             metavar="CMD")
+        cmd_arg.add_argument('--ls', action="store_true", help="List all files uploaded to the device")
+        cmd_arg.add_argument('--rm', metavar="FILE", help="Remove specified file from the device")
+        cmd_arg.add_argument('--format', action="store_true", help="Erase all stored files from the device")
+        cmd_arg.add_argument('--listen', action="store_true",
+                             help="Listen over serial for incoming messages, e.g. from print statements in a running program")
+        return parser
 
 #-----------------------------------------------------------------------------
 #-----------------------------------------------------------------------------
@@ -364,62 +365,63 @@ def get_errordesc(code):
 
 #-----------------------------------------------------------------------------
 #-----------------------------------------------------------------------------
-def main():
-    parser=setup_arg_parser()
-    if os.name != 'nt':
-        test_wine()
-    global args
-    args = parser.parse_args()
-    device = BLDevice(args)
+if __name__ == "__main__":
+    def main():
+        parser=setup_arg_parser()
+        if os.name != 'nt':
+            test_wine()
+        global args
+        args = parser.parse_args()
+        device = BLDevice(args)
 
-    # Preload any .sb or .uwc file
-    if args.run is not None:
-        split = os.path.splitext(args.run)
-        if split[1] == ".uwc" or split[1] == ".sb":
-            args.load = args.run
+        # Preload any .sb or .uwc file
+        if args.run is not None:
+            split = os.path.splitext(args.run)
+            if split[1] == ".uwc" or split[1] == ".sb":
+                args.load = args.run
 
-    # Precompile any .sb file
-    if args.load is not None:
-        split = os.path.splitext(args.load)
-        if split[1] == ".sb":
-            args.compile = args.load
+        # Precompile any .sb file
+        if args.load is not None:
+            split = os.path.splitext(args.load)
+            if split[1] == ".sb":
+                args.compile = args.load
 
-    ops = []
-    if args.compile:
-        ops += ["compile"]
-    if args.load:
-        ops += ["load"]
-    if args.run:
-        ops += ["run"]
+        ops = []
+        if args.compile:
+            ops += ["compile"]
+        if args.load:
+            ops += ["load"]
+        if args.run:
+            ops += ["run"]
 
-    #if break into command mode via reset/urt_break then do so
-    if not args.no_break:
-        device.reset_into_cmd_mode()
+        #if break into command mode via reset/urt_break then do so
+        if not args.no_break:
+            device.reset_into_cmd_mode()
 
-    if args.compile:
-        device.detect_model()
+        if args.compile:
+            device.detect_model()
 
-    if len(ops) > 0:
-        print("Performing %s for %s..." % (", ".join(ops), sys.argv[-1]))
+        if len(ops) > 0:
+            print("Performing %s for %s..." % (", ".join(ops), sys.argv[-1]))
 
-    if args.ls:
-        device.list()
-    if args.rm:
-        device.delete(args.rm)
-    if args.format:
-        device.format()
-    if args.compile:
-        device.compile(args.compile)
-    if args.load:
-        device.upload(args.load)
-    if args.run:
-        device.run(args.run)
-    if args.send:
-        cmdstr=f"{args.send}\r"
-        print(device.writerawcmd(cmdstr, timeout=args.timeout))
-        print("Command completed")
-    if args.listen:
-        device.listen()
+        if args.ls:
+            device.list()
+        if args.rm:
+            device.delete(args.rm)
+        if args.format:
+            device.format()
+        if args.compile:
+            device.compile(args.compile)
+        if args.load:
+            device.upload(args.load)
+        if args.run:
+            device.run(args.run)
+        if args.send:
+            cmdstr=f"{args.send}\r"
+            print(device.writerawcmd(cmdstr, timeout=args.timeout))
+            print("Command completed")
+        if args.listen:
+            device.listen()
 
 #-----------------------------------------------------------------------------
 #-----------------------------------------------------------------------------
