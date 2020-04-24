@@ -17,9 +17,6 @@ class UwfProcessorBl654(UwfProcessor):
     def enter_bootloader(self):
         return UwfProcessor.enter_bootloader(self)
 
-    def process_command_register_device(self, file, data_length):
-        return UwfProcessor.process_command_register_device(self, file, data_length)
-
     def process_reboot(self):
-        #self.reset_via_uartbreak()
+        self.reset_via_uartbreak()
         self.ser.close()

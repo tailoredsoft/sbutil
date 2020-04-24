@@ -132,7 +132,7 @@ def main():
         #if not args.no_break:
         #    device.reset_into_cmd_mode()
         #print(f"uwfloader.loadfirmware({args.port},{args.baud},{args.firmware},'BL654')")
-        uwfloader.loadfirmware(args.port,args.baud,args.firmware,'XXBL654XX')
+        uwfloader.loadfirmware(args.port,args.baud,args.firmware,'BL654')
         
         
 #-----------------------------------------------------------------------------
