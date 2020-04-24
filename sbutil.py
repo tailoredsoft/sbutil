@@ -22,24 +22,28 @@ Subsequently enhanced by:
 # constants
 #-----------------------------------------------------------------------------
 
+DEBUGLEVEL=3
+
 #-----------------------------------------------------------------------------
 # Module imports
 #-----------------------------------------------------------------------------
 import blutilc
-from blutilc import *
 import uwfloader
+import os
+import sys
+import serial
 
 #-----------------------------------------------------------------------------
 #-----------------------------------------------------------------------------
 def setup_arg_parser():
-    parser = argparse.ArgumentParser(
+    parser = blutilc.argparse.ArgumentParser(
         description='Perform smartBASIC Application or Firmware operations with a Laird module.')
     parser.add_argument('-p', '--port', help="Serial port to connect to",required=True)
-    parser.add_argument('-b', '--baud', type=int, default=SERIAL_DEF_BAUD, help=f"Baud rate, default={SERIAL_DEF_BAUD}")
+    parser.add_argument('-b', '--baud', type=int, default=blutilc.SERIAL_DEF_BAUD, help=f"Baud rate, default={blutilc.SERIAL_DEF_BAUD}")
     parser.add_argument('-v','--verbose', action="store_true", help="verbose mode", default=False)
     parser.add_argument('-n','--no-break', action="store_true", help="Do not reset with DTR deasserted")
     parser.add_argument('-t', '--timeout',
-                         help="Timeout for commands like --send", default=SERIAL_TIMEOUT,type=float,
+                         help="Timeout for commands like --send", default=blutilc.SERIAL_TIMEOUT,type=float,
                          metavar="TIMEOUT")
     cmd_arg = parser.add_mutually_exclusive_group(required=True)
     cmd_arg.add_argument('-f', '--firmware', help="Download a .uwf firmware file to device", metavar="UWF_FILE")
@@ -127,8 +131,8 @@ def main():
         #if break into command mode via reset/urt_break then do so
         #if not args.no_break:
         #    device.reset_into_cmd_mode()
-        print(f"uwfloader.loadfirmware({args.port},{args.baud},{args.firmware})")
-        uwfloader.loadfirmware(args.port,args.baud,args.firmware)
+        #print(f"uwfloader.loadfirmware({args.port},{args.baud},{args.firmware},'BL654')")
+        uwfloader.loadfirmware(args.port,args.baud,args.firmware,'XXBL654XX')
         
         
 #-----------------------------------------------------------------------------

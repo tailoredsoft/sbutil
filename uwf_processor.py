@@ -6,8 +6,12 @@
 import serial
 import binascii
 import struct
+import time
 
-DEVICE_TYPE_IG60 = 'IG60'
+DEBUGLEVEL=3
+
+DEVICE_TYPE_IG60  = 'IG60'
+DEVICE_TYPE_BL654 = 'BL654'
 
 SERIAL_TIMEOUT_SEC = 3
 
@@ -51,14 +55,28 @@ def init_processor(dev_type, port, baudrate):
     Instantiates and returns the requested processor
     """
     if dev_type == DEVICE_TYPE_IG60:
-        # Import the IG60 custom processor
-        from ig60_bl654_uwf_processor import Ig60Bl654UwfProcessor
+        # Import the IG60_BL654 custom processor
+        from uwf_processor_ig60_bl654 import UwfProcessorIg60Bl654
 
         # Initialize the IG60 BL654 processor
-        processor = Ig60Bl654UwfProcessor(port, baudrate)
+        processor = UwfProcessorIg60Bl654(port, baudrate)
+        if DEBUGLEVEL>=3:
+            print(f"#DBG# Initialise IG60")
+        
+    elif dev_type == DEVICE_TYPE_BL654:
+        # Import the BL654 custom processor
+        from uwf_processor_bl654 import UwfProcessorBl654
+
+        # Initialize the IG60 BL654 processor
+        processor = UwfProcessorBl654(port, baudrate)
+        if DEBUGLEVEL>=3:
+            print(f"#DBG# Initialise BL654")
+        
     else:
         # Use the generic processor
         processor = UwfProcessor(port, baudrate)
+        if DEBUGLEVEL>=3:
+            print(f"#DBG# Initialise generic")
 
     processor.enter_bootloader()
 
@@ -85,12 +103,22 @@ class UwfProcessor():
 
         # Open the COM port to the Bluetooth adapter
         self.ser = serial.Serial(port, baudrate, timeout=SERIAL_TIMEOUT_SEC)
+        
+        #initialise storage for registered memory blocks
+        self.mem_base_address = {}
+        self.mem_num_banks    = {}
+        self.mem_bank_size    = {}
+        self.mem_bank_algo    = {}
+        
 
     def write_to_comm(self, data, resp_size):
         self.ser.write(data)
         return self.ser.read(resp_size)
 
     def enter_bootloader(self):
+        if DEBUGLEVEL>=3:
+            print(f"#DBG# Enter Bootloader mode")
+            
         result = True
 
         # Send the bootloader command via smartBasic
@@ -120,6 +148,9 @@ class UwfProcessor():
                 # Send the target platform data
                 platform_command = bytearray(COMMAND_PLATFORM_CHECK, 'utf-8')
                 platform_id = file.read(data_length)
+                if DEBUGLEVEL>=3:
+                    targetId = struct.unpack('I', platform_id)[0]
+                    print(f"#DBG# Platform: id={'0x%08X'%(targetId)}")
                 port_cmd_bytes = platform_command + platform_id
                 response = self.write_to_comm(port_cmd_bytes, RESPONSE_ACKNOWLEDGE_SIZE)
 
@@ -138,11 +169,23 @@ class UwfProcessor():
 
     def process_command_register_device(self, file, data_length):
         register_device_data = file.read(data_length)
-        self.handle = struct.unpack('B', register_device_data[:UWF_OFFSET_HANDLE])[0]
-        self.base_address = struct.unpack('<I', register_device_data[UWF_OFFSET_HANDLE:UWF_OFFSET_BASE_ADDRESS])[0]
-        self.num_banks = struct.unpack('B', register_device_data[UWF_OFFSET_BASE_ADDRESS:UWF_OFFSET_NUM_BANKS])[0]
-        self.bank_size = struct.unpack('<I', register_device_data[UWF_OFFSET_NUM_BANKS:UWF_OFFSET_BANK_SIZE])[0]
-        self.bank_algo = struct.unpack('B', register_device_data[UWF_OFFSET_BANK_SIZE:UWF_OFFSET_BANK_ALGO])[0]
+        #extract handle
+        handle = struct.unpack('B', register_device_data[:UWF_OFFSET_HANDLE])[0]
+        #extract base address
+        base_address = struct.unpack('<I', register_device_data[UWF_OFFSET_HANDLE:UWF_OFFSET_BASE_ADDRESS])[0]
+        self.mem_base_address[handle]=base_address
+        #extract banks
+        num_banks = struct.unpack('B', register_device_data[UWF_OFFSET_BASE_ADDRESS:UWF_OFFSET_NUM_BANKS])[0]
+        self.mem_num_banks[handle]=num_banks
+        #extract bank size
+        bank_size = struct.unpack('<I', register_device_data[UWF_OFFSET_NUM_BANKS:UWF_OFFSET_BANK_SIZE])[0]
+        self.mem_bank_size[handle]=bank_size
+        #extarct bank alogorithm
+        bank_algo = struct.unpack('B', register_device_data[UWF_OFFSET_BANK_SIZE:UWF_OFFSET_BANK_ALGO])[0]
+        self.mem_bank_algo[handle]=bank_algo
+        
+        if DEBUGLEVEL>=3:
+            print(f"#DBG# Register Device: hndl={handle} addr={base_address} banks={num_banks} size={bank_size} algo={bank_algo}")
 
         self.registered = True
 
@@ -152,13 +195,18 @@ class UwfProcessor():
         select_device_data = file.read(data_length)
         self.selected_handle = struct.unpack('B', select_device_data[:UWF_OFFSET_HANDLE])[0]
         self.selected_bank = struct.unpack('B', select_device_data[UWF_OFFSET_HANDLE:UWF_OFFSET_BANK])[0]
+        if DEBUGLEVEL>=3:
+            print(f"#DBG# Select Device: hndl={self.selected_handle} bank={self.selected_bank}")
 
         return None
 
     def process_command_sector_map(self, file, data_length):
+        ### BUG BUG -- this can give an array of maps
         sector_map_data = file.read(data_length)
         self.sectors = struct.unpack('<I', sector_map_data[:UWF_OFFSET_SECTORS])[0]
         self.sector_size = struct.unpack('<I', sector_map_data[UWF_OFFSET_SECTORS:UWF_OFFSET_SECTOR_SIZE])[0]
+        if DEBUGLEVEL>=3:
+            print(f"#DBG# Sector Map: sectors={self.sectors} size={self.sector_size}")
 
         return None
 
@@ -171,10 +219,12 @@ class UwfProcessor():
         if self.synchronized and self.registered and self.sectors > 0 and self.sector_size > 0:
             # Get the UWF erase data
             erase_data = file.read(data_length)
-            start = self.base_address + struct.unpack('<I', erase_data[:UWF_OFFSET_ERASE_START_ADDR])[0]
+            start = self.mem_base_address[self.selected_handle] + struct.unpack('<I', erase_data[:UWF_OFFSET_ERASE_START_ADDR])[0]
             size = struct.unpack('<I', erase_data[UWF_OFFSET_ERASE_START_ADDR:UWF_OFFSET_ERASE_SIZE])[0]
-
-            if size < self.bank_size:
+            if DEBUGLEVEL>=3:
+                print(f"#DBG# Erase Block: start={start} size={size}")
+            
+            if size <= self.mem_bank_size[self.selected_handle]:
                 erase_command = bytearray(COMMAND_ERASE_SECTOR, 'utf-8')
                 while size > 0:
                     erase_sector = struct.pack('<I', start)
@@ -211,11 +261,13 @@ class UwfProcessor():
 
             # Get the UWF write data
             write_data = file.read(UWF_WRITE_BLOCK_HDR_LENGTH)
-            offset = self.base_address + struct.unpack('<I', write_data[:UWF_OFFSET_WRITE_OFFSET])[0]
+            offset = self.mem_base_address[self.selected_handle] + struct.unpack('<I', write_data[:UWF_OFFSET_WRITE_OFFSET])[0]
             flags = struct.unpack('<I', write_data[UWF_OFFSET_WRITE_OFFSET:UWF_OFFSET_WRITE_FLAGS])[0]
             remaining_data_size = data_length - UWF_WRITE_BLOCK_HDR_LENGTH
+            if DEBUGLEVEL>=3:
+                print(f"#DBG# Write Block: start={offset} flags={flags} len={remaining_data_size}")
 
-            if remaining_data_size < self.bank_size:
+            if remaining_data_size <= self.mem_bank_size[self.selected_handle]:
                 verify_start_addr = struct.pack('<I', offset)
                 while remaining_data_size > 0:
                     if remaining_data_size < self.write_block_size:
@@ -295,9 +347,22 @@ class UwfProcessor():
 
     def process_command_unregister(self, file, data_length):
         unregister_device_data = file.read(data_length)
+        if DEBUGLEVEL>=3:
+            print(f"#DBG# Unregister Device: hndl={unregister_device_data}")
 
         return None
 
+    def reset_via_uartbreak(self,brk_timeout=0.1, post_timeout=0.5):
+        if DEBUGLEVEL>=3:
+            print(f"#DBG# Reseting via uart_break")
+        self.ser.setDTR(False)
+        self.ser.break_condition=True
+        time.sleep(brk_timeout)
+        self.ser.break_condition=False
+        self.ser.setDTR(True)
+        time.sleep(post_timeout)
+        return None
+            
     def process_reboot(self):
         port_cmd_bytes = bytearray(COMMAND_REBOOT_BOOTLOADER, 'utf-8')
         self.ser.write(port_cmd_bytes)

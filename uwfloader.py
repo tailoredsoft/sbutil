@@ -9,6 +9,8 @@ import serial
 import struct
 import uwf_processor
 
+DEBUGLEVEL=3
+
 EXIT_CODE_SUCCESS = 0
 
 UWF_READ_SUCCESS = 1
