@@ -60,7 +60,7 @@ def setup_arg_parser():
                          help="Execute specified smartBasic file on device (if argument is a .sb file it will be compiled and uploaded first, if argument is a .uwc file it will be uploaded first.)",
                          metavar="FILE")
     cmd_arg.add_argument('-s', '--send',
-                         help="Send the string CMD terminated by and listen for {SERIAL_TIMEOUT} seconds \\r",
+                         help="Send the string CMD (\\r will be auto appended) and listen for {SERIAL_TIMEOUT} seconds",
                          metavar="CMD")
     cmd_arg.add_argument('--ls', action="store_true", help="List all files uploaded to the device")
     cmd_arg.add_argument('--rm', metavar="FILE", help="Remove specified file from the device")
@@ -82,7 +82,7 @@ def main():
         #make the args visible to blutilc
         blutilc.args=args
         #create an instance of a smartBASIC device as per the class in blutilc.py
-        device = BLDevice(args)
+        device = blutilc.BLDevice(args)
 
         # Preload any .sb or .uwc file
         if args.run is not None:
