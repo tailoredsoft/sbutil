@@ -1,4 +1,8 @@
-blutil.py is a command line tool for programming BL-600SA "SmartBASIC"
-devices.
+Python based utility to download apps and firmware to Laird's smattBASIC modules
 
-See http://projectgus.com/2014/03/laird-bl600-modules for more details
+Files: blutil.py
+    See http://projectgus.com/2014/03/laird-bl600-modules for more details
+    and licenced as per file LICENSE.blutil.txt
+
+Files: uwfloader.py, uwf_processor_ig60_bl654.py, uwf_processor.py
+    Credit to original author Moses Corriea of Laird Connectivity
