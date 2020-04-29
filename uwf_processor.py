@@ -164,7 +164,7 @@ class UwfProcessor():
         self.ser.write(data)
         return self.ser.read(resp_size)
 
-    def enter_bootloader(self):
+    def enter_bootloader(self, postdelay=0.5):
         if VERBOSELEVEL>=2:
             print(f"Entering Bootloader mode..")
             
@@ -175,6 +175,9 @@ class UwfProcessor():
         # Send the bootloader command via smartBasic
         self.ser.write(COMMAND_ENTER_BOOTLOADER)
 
+        #wait for the module to reset and start
+        time.sleep(postdelay)
+        
         # Verify no error
         response = self.ser.readline()
         if len(response) != 0:
@@ -441,7 +444,7 @@ class UwfProcessor():
 
         return None
 
-    def reset_via_uartbreak(self,brk_timeout=0.1, post_timeout=0.5):
+    def reset_via_uartbreak(self,brk_timeout=0.1, post_delay=0.5):
         if VERBOSELEVEL>=2:
             print(f"Reseting via uart_break")
         self.ser.setDTR(False)
@@ -449,7 +452,7 @@ class UwfProcessor():
         time.sleep(brk_timeout)
         self.ser.break_condition=False
         self.ser.setDTR(True)
-        time.sleep(post_timeout)
+        time.sleep(post_delay)
         return None
             
     def process_reboot(self):
