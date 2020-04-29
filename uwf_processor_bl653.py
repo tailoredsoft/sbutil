@@ -14,6 +14,7 @@ class UwfProcessorBl653(UwfProcessor):
         self.expected_bank_algo = 1
 
     def enter_bootloader(self):
+        self.reset_via_uartbreak()
         return UwfProcessor.enter_bootloader(self)
 
     def process_reboot(self):

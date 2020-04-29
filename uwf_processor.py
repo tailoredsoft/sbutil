@@ -18,7 +18,7 @@ DEVICE_TYPE_BL652    = 'BL652'
 SERIAL_TIMEOUT_SEC = 3
 DATA_BLOCK_SIZE=252      #16 to 252, uwflash uses 128, value must be divisible by 4
 
-COMMAND_ENTER_BOOTLOADER = 'AT+FUP\r'
+COMMAND_ENTER_BOOTLOADER = b'AT+FUP\r'
 COMMAND_SYNC_WITH_BOOTLOADER = '80'
 COMMAND_PLATFORM_CHECK = 'p'
 COMMAND_ERASE_SECTOR = 'e'
@@ -169,10 +169,11 @@ class UwfProcessor():
             print(f"Entering Bootloader mode..")
             
         result = True
+        #flush the serial rx buffer 
+        self.ser.reset_input_buffer()
 
         # Send the bootloader command via smartBasic
-        port_cmd_bytes = bytearray(COMMAND_ENTER_BOOTLOADER, 'utf-8')
-        self.ser.write(port_cmd_bytes)
+        self.ser.write(COMMAND_ENTER_BOOTLOADER)
 
         # Verify no error
         response = self.ser.readline()
@@ -303,7 +304,7 @@ class UwfProcessor():
             size = struct.unpack('<I', erase_data[UWF_OFFSET_ERASE_START_ADDR:UWF_OFFSET_ERASE_SIZE])[0]
             end_offset=start+size-1 #last byte offset to clear
             if VERBOSELEVEL>=2:
-                print(f"Erase Block: start_offset={start} size={size} abs_addr={baseaddr+start}")
+                print(f"Erase Block: addr=0x{baseaddr+start:08x} (offset=0x{start:x}) size={size} (0x{size:x})")
             
             if size <= self.mem_bank_size[self.selected_handle]:
                 erase_command = bytearray(COMMAND_ERASE_SECTOR, 'utf-8')
@@ -353,14 +354,14 @@ class UwfProcessor():
             # Get the UWF write data
             write_data = file.read(UWF_WRITE_BLOCK_HDR_LENGTH)
             baseaddr=self.mem_base_address[self.selected_handle]
-            offset = baseaddr + struct.unpack('<I', write_data[:UWF_OFFSET_WRITE_OFFSET])[0]
+            offset = struct.unpack('<I', write_data[:UWF_OFFSET_WRITE_OFFSET])[0]
             flags = struct.unpack('<I', write_data[UWF_OFFSET_WRITE_OFFSET:UWF_OFFSET_WRITE_FLAGS])[0]
             remaining_data_size = data_length - UWF_WRITE_BLOCK_HDR_LENGTH
             if VERBOSELEVEL>=2:
-                print(f"Write Block: start_offset={offset-baseaddr} flags={flags} len={remaining_data_size} abs_addr={offset}")
+                print(f"Write Block: addr=0x{offset+baseaddr:08x} (offset=0x{offset:x}) flags=0x{flags:x}  len={remaining_data_size} (0x{remaining_data_size:x})")
 
             if remaining_data_size <= self.mem_bank_size[self.selected_handle]:
-                verify_start_addr = struct.pack('<I', offset)
+                verify_start_addr = struct.pack('<I', offset+baseaddr)
                 while remaining_data_size > 0:
                     if remaining_data_size < self.write_block_size:
                         bytes_to_write = remaining_data_size
@@ -373,7 +374,7 @@ class UwfProcessor():
                         
                     # Send the write command
                     write_command = bytearray(COMMAND_WRITE_SECTOR, 'utf-8')
-                    start_addr = struct.pack('<I', offset)
+                    start_addr = struct.pack('<I', offset+baseaddr)
                     data_block_size = struct.pack('B', bytes_to_write)
                     port_cmd_bytes = write_command + start_addr + data_block_size
                     response = self.write_to_comm(port_cmd_bytes, RESPONSE_ACKNOWLEDGE_SIZE)
@@ -411,7 +412,7 @@ class UwfProcessor():
 
                                 if response.decode('utf-8') == RESPONSE_ACKNOWLEDGE:
                                     # Verification successful; reset for next verification
-                                    verify_start_addr = struct.pack('<I', offset)
+                                    verify_start_addr = struct.pack('<I', offset+baseaddr)
                                     verify_count = 1
                                     verify_checksum = 0
                                     verify_data_block_size = 0
