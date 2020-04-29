@@ -96,6 +96,41 @@ def init_processor(dev_type, port, baudrate):
 
     return processor
 
+class SectorMapIter():
+    def __init__(self, tupSectors, tupSectorSz, nOffsetStart, nOffsetEnd):
+        if len(tupSectors)>0 and len(tupSectors) == len(tupSectorSz):
+            self.tSectors = tupSectors
+            self.tSectorSz = tupSectorSz
+        else:
+            raise Exception('Sector map invalid')            
+        self.nOffset    = nOffsetStart
+        self.nOffsetEnd = nOffsetEnd
+
+    def __iter__(self):
+        self.tuple_Idx=0
+        self.sector_num=0
+        self.sectorThisBase=0
+        return self
+
+    def __next__(self):
+        for idx in range(self.tuple_Idx,len(self.tSectors)):
+            sector_numof=self.tSectors[idx]
+            sector_size =self.tSectorSz[idx]
+            for num in range(self.sector_num,sector_numof):
+                sectorNextBase = self.sectorThisBase + sector_size
+                if self.nOffset < sectorNextBase:
+                    self.nOffset = sectorNextBase
+                    self.sector_num=num
+                    self.tuple_Idx=idx
+                    return self.sectorThisBase
+                self.sectorThisBase=sectorNextBase
+                #check if above range end
+                if sectorNextBase >= self.nOffsetEnd:
+                    raise StopIteration  
+            self.sector_num=0
+        raise StopIteration
+
+
 class UwfProcessor():
     """
     Base class that captures the foundational data and functions
@@ -147,7 +182,7 @@ class UwfProcessor():
             print(f"In Bootloader")
 
         return result
-
+        
     def process_command_target_platform(self, file, data_length):
         error = None
 
@@ -216,10 +251,27 @@ class UwfProcessor():
 
         return None
 
+    #will return True if 'memsize' is equal to the sum of all sectors mentioned in the map
+    def __VerifySectorMap(self,banksize):
+        sum=0
+        for i in range(len(self.sectors)):
+            sum += self.sectors[i] * self.sector_size[i]
+        if sum != banksize:
+            return False
+        return True
+
     def process_command_sector_map(self, file, data_length):
+        if self.selected_handle is None :
+            raise Exception('SectorMap defined before SelectDevice')            
+        if not self.selected_handle in self.mem_bank_size:
+            raise Exception('SectorMap defined before RegisterDevice')            
         sector_map_data = file.read(data_length)
-        arrsize=int(data_length/8)
+        arrsize=int(data_length/(UWF_UI32_SIZE+UWF_UI32_SIZE))
+        if arrsize*(UWF_UI32_SIZE+UWF_UI32_SIZE) != data_length:
+            raise Exception('SectorMap length error in uwf file')
         pos=0
+        self.sectors = []
+        self.sector_size = []
         while arrsize>0:
             sectors = struct.unpack('<I', sector_map_data[pos:pos+UWF_UI32_SIZE])[0]
             self.sectors.append(sectors)
@@ -227,10 +279,11 @@ class UwfProcessor():
             sector_size = struct.unpack('<I', sector_map_data[pos:pos+UWF_UI32_SIZE])[0]
             self.sector_size.append(sector_size)
             pos = pos+UWF_UI32_SIZE
-            arrsize -= (UWF_UI32_SIZE+UWF_UI32_SIZE)
+            arrsize -= 1
         if VERBOSELEVEL>=2:
             print(f"Sector Map: sectors={self.sectors} size={self.sector_size}")
-
+        if self.__VerifySectorMap(self.mem_bank_size[self.selected_handle]) == False:
+            raise Exception('SectorMap not consistent with bank size')
         return None
 
     def process_command_erase_blocks(self, file, data_length):
@@ -250,7 +303,7 @@ class UwfProcessor():
             size = struct.unpack('<I', erase_data[UWF_OFFSET_ERASE_START_ADDR:UWF_OFFSET_ERASE_SIZE])[0]
             end_offset=start+size-1 #last byte offset to clear
             if VERBOSELEVEL>=2:
-                print(f"Erase Block: start_offset={start} size={size}")
+                print(f"Erase Block: start_offset={start} size={size} abs_addr={baseaddr+start}")
             
             if size <= self.mem_bank_size[self.selected_handle]:
                 erase_command = bytearray(COMMAND_ERASE_SECTOR, 'utf-8')
@@ -299,11 +352,12 @@ class UwfProcessor():
 
             # Get the UWF write data
             write_data = file.read(UWF_WRITE_BLOCK_HDR_LENGTH)
-            offset = self.mem_base_address[self.selected_handle] + struct.unpack('<I', write_data[:UWF_OFFSET_WRITE_OFFSET])[0]
+            baseaddr=self.mem_base_address[self.selected_handle]
+            offset = baseaddr + struct.unpack('<I', write_data[:UWF_OFFSET_WRITE_OFFSET])[0]
             flags = struct.unpack('<I', write_data[UWF_OFFSET_WRITE_OFFSET:UWF_OFFSET_WRITE_FLAGS])[0]
             remaining_data_size = data_length - UWF_WRITE_BLOCK_HDR_LENGTH
             if VERBOSELEVEL>=2:
-                print(f"Write Block: start={offset} flags={flags} len={remaining_data_size}")
+                print(f"Write Block: start_offset={offset-baseaddr} flags={flags} len={remaining_data_size} abs_addr={offset}")
 
             if remaining_data_size <= self.mem_bank_size[self.selected_handle]:
                 verify_start_addr = struct.pack('<I', offset)
