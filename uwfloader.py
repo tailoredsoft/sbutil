@@ -65,7 +65,7 @@ def loadfirmware(port, baudrate, file_path, dev_type=None):
                             error = processor.process_command_register_device(f, data_length)
                         elif cmd == UWF_COMMAND_SELECT and data_length == UWF_SELECT_DEVICE_LENGTH:
                             error = processor.process_command_select_device(f, data_length)
-                        elif cmd == UWF_COMMAND_SECTOR_MAP and data_length == UWF_SECTOR_MAP_LENGTH:
+                        elif cmd == UWF_COMMAND_SECTOR_MAP:
                             error = processor.process_command_sector_map(f, data_length)
                         elif cmd == UWF_COMMAND_ERASE and data_length == UWF_ERASE_BLOCK_LENGTH:
                             error = processor.process_command_erase_blocks(f, data_length)

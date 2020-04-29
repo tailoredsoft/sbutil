@@ -143,6 +143,7 @@ class UwfProcessor():
         self.write_complete = False
         self.sectors = []
         self.sector_size = []
+        self.selected_handle = None
 
         # Number of bytes of data to write for each write command
         self.write_block_size = DATA_BLOCK_SIZE
@@ -188,6 +189,8 @@ class UwfProcessor():
         return result
         
     def process_command_target_platform(self, file, data_length):
+        if VERBOSELEVEL>=3:
+            print(f"TARGET_PLATFORM")
         error = None
 
         # Synchronize with the bootloader
@@ -223,6 +226,8 @@ class UwfProcessor():
         return error
 
     def process_command_register_device(self, file, data_length):
+        if VERBOSELEVEL>=3:
+            print(f"REGISTER_DEVICE")
         register_device_data = file.read(data_length)
         #extract handle
         handle = struct.unpack('B', register_device_data[:UWF_OFFSET_HANDLE])[0]
@@ -247,6 +252,8 @@ class UwfProcessor():
         return None
 
     def process_command_select_device(self, file, data_length):
+        if VERBOSELEVEL>=3:
+            print(f"SELECT_DEVICE")
         select_device_data = file.read(data_length)
         self.selected_handle = struct.unpack('B', select_device_data[:UWF_OFFSET_HANDLE])[0]
         self.selected_bank = struct.unpack('B', select_device_data[UWF_OFFSET_HANDLE:UWF_OFFSET_BANK])[0]
@@ -265,10 +272,8 @@ class UwfProcessor():
         return True
 
     def process_command_sector_map(self, file, data_length):
-        if self.selected_handle is None :
-            raise Exception('SectorMap defined before SelectDevice')            
-        if not self.selected_handle in self.mem_bank_size:
-            raise Exception('SectorMap defined before RegisterDevice')            
+        if VERBOSELEVEL>=3:
+            print(f"SECTOR_MAP")
         sector_map_data = file.read(data_length)
         arrsize=int(data_length/(UWF_UI32_SIZE+UWF_UI32_SIZE))
         if arrsize*(UWF_UI32_SIZE+UWF_UI32_SIZE) != data_length:
@@ -286,14 +291,17 @@ class UwfProcessor():
             arrsize -= 1
         if VERBOSELEVEL>=2:
             print(f"Sector Map: sectors={self.sectors} size={self.sector_size}")
-        if self.__VerifySectorMap(self.mem_bank_size[self.selected_handle]) == False:
-            raise Exception('SectorMap not consistent with bank size')
+        if not self.selected_handle is None :
+            if self.__VerifySectorMap(self.mem_bank_size[self.selected_handle]) == False:
+                raise Exception('SectorMap not consistent with bank size')
         return None
 
     def process_command_erase_blocks(self, file, data_length):
         """
         Erases blocks according to the sector size value from the the UWF file
         """
+        if VERBOSELEVEL>=3:
+            print(f"ERASE_BLOCK")
         error = None
 
         if self.synchronized       and \
@@ -336,6 +344,8 @@ class UwfProcessor():
         Sends the write command, then a data block 'X' times, then verifies
         The size of the data block and the number of data blocks before verification are configurable
         """
+        if VERBOSELEVEL>=3:
+            print(f"WRITE_BLOCK")
         error = None
 
         if self.erased:
@@ -437,6 +447,8 @@ class UwfProcessor():
         return error
 
     def process_command_unregister(self, file, data_length):
+        if VERBOSELEVEL>=3:
+            print(f"UNREGISTER_DEVICE")
         unregister_device_data = file.read(data_length)
         handle = struct.unpack('B', unregister_device_data[:UWF_OFFSET_HANDLE])[0]
         if VERBOSELEVEL>=2:
