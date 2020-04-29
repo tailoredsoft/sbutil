@@ -300,39 +300,29 @@ class UwfProcessor():
             # Get the UWF erase data
             erase_data = file.read(data_length)
             baseaddr=self.mem_base_address[self.selected_handle]
-            start = struct.unpack('<I', erase_data[:UWF_OFFSET_ERASE_START_ADDR])[0]
+            offset = struct.unpack('<I', erase_data[:UWF_OFFSET_ERASE_START_ADDR])[0]
             size = struct.unpack('<I', erase_data[UWF_OFFSET_ERASE_START_ADDR:UWF_OFFSET_ERASE_SIZE])[0]
-            end_offset=start+size-1 #last byte offset to clear
             if VERBOSELEVEL>=2:
-                print(f"Erase Block: addr=0x{baseaddr+start:08x} (offset=0x{start:x}) size={size} (0x{size:x})")
+                print(f"Erase Block: addr=0x{baseaddr+offset:08x} (offset=0x{offset:x}) size={size} (0x{size:x})")
             
-            if size <= self.mem_bank_size[self.selected_handle]:
+            if offset+size <= self.mem_bank_size[self.selected_handle]:
                 erase_command = bytearray(COMMAND_ERASE_SECTOR, 'utf-8')
-                sectoridx=0
-                # this only works because the erase is for the entire section
-                # otherwise this is a serious bug
-                # basically we need to start at address  int(start/sectorsize)*sectorsize
-                # and end the loop when address > end_offset
-                # basically do  while offset < end_offset
-                while size > 0:
-                    erase_sector = struct.pack('<I', start+baseaddr)
+                map_iter=SectorMapIter(self.sectors, self.sector_size, offset, offset+size)
+                for ofs in map_iter:
+                    erase_sector = struct.pack('<I', ofs+baseaddr)
                     port_cmd_bytes = erase_command + erase_sector
                     response = self.write_to_comm(port_cmd_bytes, RESPONSE_ACKNOWLEDGE_SIZE)
-
                     if response.decode('utf-8') != RESPONSE_ACKNOWLEDGE:
                         error = ERROR_ERASE_BLOCKS.format('Non-ack to erase command')
                         break
-                    sectorsz=self.sector_size[sectoridx]
-                    start += sectorsz
-                    size  -= sectorsz
                     if VERBOSELEVEL>=2:
                         print('.',end='',flush=True)
                 else:
                     self.erased = True
+                if VERBOSELEVEL>=2:
+                    print('.',end='\n',flush=True)
             else:
-                error = ERROR_ERASE_BLOCKS.format('Erase block size > bank size')
-            if VERBOSELEVEL>=2:
-                print('.',end='\n',flush=True)
+                error = ERROR_ERASE_BLOCKS.format('Erase block size plus offset > bank size')
         else:
             error = ERROR_ERASE_BLOCKS.format('Target platform, register device, or sector map commands not yet processed')
 
