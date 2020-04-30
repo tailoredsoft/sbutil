@@ -9,7 +9,7 @@ Original works by:
     Copyright (C)2014 Angus Gratton, released under BSD license as per the LICENSE file.
 
 Subsequently enhanced by:
-  Dimitri Siganos
+  Dimitrios Siganos
   Oli Solomons
   Mahendra Tailor 
 """
