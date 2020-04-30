@@ -9,7 +9,7 @@ Original works by:
     Copyright (C)2014 Angus Gratton, released under BSD license as per the LICENSE file.
 
 Subsequently enhanced by:
-  Dimitri Siganos
+  Dimitrios Siganos
   Oli Solomons
   Mahendra Tailor 
 """
@@ -27,8 +27,8 @@ VERBOSELEVEL=0
 SERIAL_TIMEOUT=2.0  #e.g 2.456 will mean 2456 milliseconds
 SERIAL_DEF_BAUD=115200
 
-#- comilation realted
-ALLOW_ONLINE_COMPILE=True   #Set True to disallow online compiling for security reasons
+#- compilation related
+ALLOW_ONLINE_COMPILE=True   #Set to False to disallow online compiling for security reasons
 URL_XCOMPILE_SERVER='uwterminalx.lairdconnect.com'
 ONLINE_SB_TEMPFILENAME='temp.sb'
 
