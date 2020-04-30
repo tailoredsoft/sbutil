@@ -1,2 +1,2 @@
-//File sbnoinc.sb
+//File sbnoinc.sb which does not include any #include lines
 print "\nThis is sbnoinc.sb\n"
