@@ -6,3 +6,11 @@ Files: blutil.py
 
 Files: uwfloader.py, uwf_processor_ig60_bl654.py, uwf_processor.py
     Credit to original author Moses Corriea of Laird Connectivity
+
+
+Note: On Linux 'wine' will need to be installed
+        sudo apt-get install wine
+      
+      On Ubuntu 20.xx and newer to install pyserial
+        sudo apt-get install python3-pip
+        pip3 install pyserial
