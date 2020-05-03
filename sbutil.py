@@ -73,8 +73,6 @@ def setup_arg_parser():
 #-----------------------------------------------------------------------------
 def main():
     parser=setup_arg_parser()
-    if os.name != 'nt':
-        blutilc.test_wine()
     global args
     args = parser.parse_args()
     

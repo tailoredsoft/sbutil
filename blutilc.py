@@ -156,10 +156,16 @@ class BLDevice(object):
             if ALLOW_ONLINE_COMPILE:
                 return self.online_compile(filepath)
             else:
-                raise RuntimeError("Compilation failed")            
+                raise RuntimeError("Compilation failed")  
+        #reaching here means a local xcompiler exe has been found          
+        if args.verbose:
+            print(f"Using local compiler: {os.path.basename(compiler)}")
         print("Compiling %s with %s..." % (filepath, os.path.basename(compiler)))
         args = [compiler, filepath]
         if os.name != 'nt':
+            #if not on windows then test if 'wine' is installed
+            blutilc.test_wine()
+            # 'wine' exists so prepend the args with it
             args = ["wine"] + args
         ret = subprocess.call(args, stdin=None, stdout=sys.stdout, stderr=sys.stderr, shell=False)
         if ret != 0:
