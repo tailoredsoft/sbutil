@@ -7,7 +7,7 @@ VERBOSELEVEL=0
 BT_BOOTLOADER_MODE = 0
 BT_SMART_BASIC_MODE = 1
 
-class UwfProcessorIg60Bl654(UwfProcessor):
+class UwfProcessorRM1XX(UwfProcessor):
     """
     Class that encapsulates how to process UWF commands for an IG60
     BL654 module upgrade

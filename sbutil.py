@@ -103,8 +103,9 @@ def main():
             ops += ["run"]
 
         #if break into command mode via reset/urt_break then do so
-        if not args.no_break:
-            device.reset_into_cmd_mode()
+        if not args.send:
+            if not args.no_break:
+                device.reset_into_cmd_mode()
 
         if args.compile:
             device.detect_model()
