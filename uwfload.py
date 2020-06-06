@@ -5,7 +5,7 @@ This is a command line tool for downloading firmware to Laird "SmartBASIC" devic
 Usage: python3 uwfload.py serialport baudrate model filepath
            port      example on windows would be COM123
            baudrate  e.g. 115200
-           model     one of BL652,BL653,BL654,BL654IG,RM1XX,GENERIC
+           model     one of BL652,BL653,BL654,BL654IG,RM1XX,BT900,GENERIC
            filepath  path and name of .uwf file (delimited by "" if space in name)
 
 Original works by:
@@ -42,7 +42,7 @@ def main():
         print(f"Usage: python3 {sys.argv[0]} serialport baudrate model filepath")
         print('      [serialport] is like COM12 on Windows, or /dev/ttyUSB34 on Linux')
         print('      [baudrate] is like 115200')
-        print('      [model] is one of BL652,BL653,BL654,BL654IG,RM1XX,GENERIC')
+        print('      [model] is one of BL652,BL653,BL654,BL654IG,RM1XX,BT900,GENERIC')
         print('      Delimit [filepath] with "" when it contains spaces')
     else:
         #download firmware

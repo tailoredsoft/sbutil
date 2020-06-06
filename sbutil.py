@@ -40,7 +40,7 @@ def setup_arg_parser():
     parser = blutilc.argparse.ArgumentParser(
         description=
             """Perform smartBASIC Application or Firmware operations with a Laird module.
-                 Module type can be: BL654 or BL654IG or BL652 or BL653 or GENERIC
+                 Module type can be: BL654 | BL654IG | BL652 | BL653 | RM1XX | BT900 | GENERIC
             """)
     parser.add_argument('-p', '--port', help="Serial port to connect to",required=True)
     parser.add_argument('-b', '--baud', type=int, default=blutilc.SERIAL_DEF_BAUD, help=f"Baud rate, default={blutilc.SERIAL_DEF_BAUD}")

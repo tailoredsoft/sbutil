@@ -15,6 +15,7 @@ DEVICE_TYPE_BL654    = 'BL654'
 DEVICE_TYPE_BL653    = 'BL653'
 DEVICE_TYPE_BL652    = 'BL652'
 DEVICE_TYPE_RM1XX    = 'RM1XX'
+DEVICE_TYPE_BT900    = 'BT900'
 
 SERIAL_TIMEOUT_SEC = 3
 DATA_BLOCK_SIZE=252      #16 to 252, uwflash uses 128, value must be divisible by 4
@@ -92,6 +93,13 @@ def init_processor(dev_type, port, baudrate):
         # Import the RM1XX custom processor
         from uwf_processor_rm1xx import UwfProcessorRM1XX
         processor = UwfProcessorRM1XX(port, baudrate)
+        if VERBOSELEVEL>=2:
+            print(f"Initialise {dev_type}")
+
+    elif dev_type == DEVICE_TYPE_BT900:
+        # Import the BT900 custom processor
+        from uwf_processor_bt900 import UwfProcessorBT900
+        processor = UwfProcessorBT900(port, baudrate)
         if VERBOSELEVEL>=2:
             print(f"Initialise {dev_type}")
         
